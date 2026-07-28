@@ -193,6 +193,9 @@
       { k: 'freedom', t: 'range', min: 0, max: 1, step: 0.05 },
     ]],
     ['color', [
+      // diffraction picked up from the fixed lamp — only while the sheet is
+      // turning through the angle, never on the formed mark
+      { k: 'holo',  t: 'range', min: 0, max: 1, step: 0.01, label: 'glimmer' },
       { k: 'paper', t: 'color' },
       { k: 'ink',   t: 'color' },
     ]],

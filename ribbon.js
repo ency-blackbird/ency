@@ -25,7 +25,7 @@
     twist: 1, charset: 'ascii', tempo: 1, loop: true, random: false,
     gran: 130, float: 1, bend: 1, trail: 0.35, gather: 0, reveal: 'auto',
     ambient: 1.5, chaos: 1.2, mouse: 0.5, freedom: 0.4,
-    scale: 1, ink: '#c0c0c0', paper: '#232323'
+    scale: 1, holo: 0, ink: '#c0c0c0', paper: '#232323'
   };
 
   var KEYS = Object.keys(DEFAULTS);
@@ -87,13 +87,63 @@
   function rotX(p,a){var c=Math.cos(a),s=Math.sin(a);return [p[0],c*p[1]-s*p[2],s*p[1]+c*p[2]];}
   function rotZ(p,a){var c=Math.cos(a),s=Math.sin(a);return [c*p[0]-s*p[1],s*p[0]+c*p[1],p[2]];}
   var Lx=0.35,Ly=0.5,Lz=0.79; // light dir (normalized-ish)
+  // half-vector between the light and a straight-on eye, for the grating term
+  var Hx=Lx, Hy=Ly, Hz=Lz+1.0;
+  (function(){ var l=Math.sqrt(Hx*Hx+Hy*Hy+Hz*Hz); Hx/=l; Hy/=l; Hz/=l; })();
+
+  // Visible-spectrum wavelength (nm) to rgb — lifted from holodisc's shader so
+  // the mesh iridesces off the same physics rather than a hue cycle.
+  function wl2rgb(w){
+    var r,g,b;
+    if      (w<440.0){ r=(440.0-w)/60.0; g=0.0; b=1.0; }
+    else if (w<490.0){ r=0.0; g=(w-440.0)/50.0; b=1.0; }
+    else if (w<510.0){ r=0.0; g=1.0; b=(510.0-w)/20.0; }
+    else if (w<580.0){ r=(w-510.0)/70.0; g=1.0; b=0.0; }
+    else if (w<645.0){ r=1.0; g=(645.0-w)/65.0; b=0.0; }
+    else             { r=1.0; g=0.0; b=0.0; }
+    var a=1.0;
+    if (w<420.0) a=0.3+0.7*(w-380.0)/40.0;
+    if (w>700.0) a=0.3+0.7*(780.0-w)/80.0;
+    return [Math.max(0,Math.min(1,r))*a, Math.max(0,Math.min(1,g))*a, Math.max(0,Math.min(1,b))*a];
+  }
+
+  // The lamp does not move. Holodisc's diffraction is a function of screen
+  // position against a fixed light and eye — the disc spins *through* a
+  // stationary rainbow rather than carrying one around. So this is keyed to the
+  // cell's place on screen, not to the ribbon's orientation: the mesh travels
+  // through the field. It also means the whole thing precomputes on resize and
+  // costs nothing per frame.
+  var holoIdx=null, LGT=[-0.35,0.55,0.90];
+  function buildHoloField(){
+    holoIdx=new Uint16Array(cols*rows);
+    var R=Math.min(W,H)*0.75, SAT=0.62;
+    for(var gy=0;gy<rows;gy++)for(var gx=0;gx<cols;gx++){
+      var px=((gx+0.5)*cellW - W*0.5)/R, py=((gy+0.5)*cellH - H*0.5)/R;
+      var rr=Math.sqrt(px*px+py*py)||1e-4, urx=px/rr, ury=py/rr;   // radial grating, as on a disc
+      var wx=LGT[0]-px, wy=LGT[1]-py, wz=LGT[2];                    // point -> light
+      var wl_=Math.sqrt(wx*wx+wy*wy+wz*wz); wx/=wl_; wy/=wl_;
+      var ox=-px*0.35, oy=-py*0.35, oz=1.7;                         // point -> eye
+      var ol=Math.sqrt(ox*ox+oy*oy+oz*oz); ox/=ol; oy/=ol;
+      var sd=(wx*urx+wy*ury)+(ox*urx+oy*ury);                       // the grating term
+      var r=0,g=0,b=0;
+      for(var mo=1;mo<=4;mo++){                                     // sum the diffraction orders
+        var w=1600.0*Math.abs(sd)/mo;
+        if(w>380.0&&w<780.0){ var c=wl2rgb(w), k=1.4/mo; r+=c[0]*k; g+=c[1]*k; b+=c[2]*k; }
+      }
+      var mx=Math.max(r,g,b); if(mx>1){ r/=mx; g/=mx; b/=mx; }
+      var lum=r*0.2126+g*0.7152+b*0.0722;                           // holodisc's u_sat
+      r=lum+(r-lum)*SAT; g=lum+(g-lum)*SAT; b=lum+(b-lum)*SAT;
+      holoIdx[gy*cols+gx]=((r*15+0.5)|0)<<8 | ((g*15+0.5)|0)<<4 | ((b*15+0.5)|0);
+    }
+  }
 
   // ---- the real logo: filled brush path from arc-mark.svg (viewBox 148x168) ----
   var LOGO_VB=[148,168];
   var LOGO_D="M 90.297 11.198 C 89.114 12.464, 85.619 18.435, 82.531 24.468 C 79.443 30.500, 76.259 36.161, 75.456 37.049 C 74.653 37.936, 74.298 38.965, 74.668 39.335 C 75.038 39.705, 74.415 41.019, 73.284 42.254 C 72.152 43.489, 69.751 47.200, 67.949 50.500 C 66.147 53.800, 63.842 57.433, 62.828 58.573 C 61.814 59.713, 59.498 63.538, 57.682 67.073 C 51.697 78.721, 46.707 87.469, 44.873 89.529 C 43.879 90.645, 40.100 97.845, 36.474 105.529 C 27.188 125.210, 27.355 124.810, 25.415 132 C 23.451 139.281, 22.592 140.767, 21.431 138.889 C 19.008 134.967, 18.940 96.612, 21.328 80 C 22.237 73.675, 23.098 61.975, 23.241 54 L 23.500 39.500 21.441 39.206 C 20.309 39.044, 18.114 39.909, 16.563 41.129 L 13.742 43.348 14.251 52.262 L 14.759 61.176 13.311 64.078 C 11.213 68.284, 9.635 90.139, 9.563 116 L 9.500 138.500 11.456 144.500 C 13.723 151.454, 16.039 154.446, 21.210 157.097 C 27.744 160.448, 31.626 159.491, 53 149.260 C 60.975 145.443, 69.975 141.381, 73 140.234 C 88.705 134.279, 98.006 131.092, 101.555 130.452 C 103.725 130.060, 105.950 129.405, 106.500 128.996 C 110.220 126.230, 123.103 127.454, 130.637 131.289 C 132.212 132.091, 134.512 133.059, 135.750 133.441 L 138 134.135 137.919 129.817 C 137.874 127.410, 136.879 123.749, 135.669 121.542 L 133.500 117.583 128.801 115.908 C 126.216 114.986, 123.898 114.435, 123.650 114.683 C 122.624 115.710, 113.094 109.699, 107.566 104.539 C 104.302 101.493, 101.233 99, 100.746 99 C 99.274 99, 91.182 93.181, 78.135 82.742 C 71.334 77.301, 65.146 72.610, 64.385 72.317 C 62.556 71.616, 62.605 68.089, 64.454 67.379 C 65.254 67.072, 66.901 64.724, 68.115 62.161 C 69.328 59.597, 72.682 53.900, 75.568 49.500 C 78.453 45.100, 83.071 37.675, 85.831 33 C 88.590 28.325, 92.120 22.964, 93.674 21.087 C 95.228 19.210, 97.261 16.430, 98.191 14.910 L 99.881 12.147 98.685 11.154 C 98.027 10.608, 96.354 9.876, 94.968 9.528 L 92.447 8.895 90.297 11.198 M 52.199 87.750 C 51.134 89.263, 49.947 91.515, 49.562 92.755 C 49.177 93.996, 47.748 96.335, 46.386 97.953 C 44.268 100.470, 37.991 116.153, 34.874 126.714 C 34.353 128.481, 33.493 130.196, 32.963 130.523 C 31.817 131.231, 31.692 141.967, 32.809 143.725 L 33.588 144.951 40.044 142.665 C 43.595 141.408, 48.695 139.394, 51.377 138.189 C 54.060 136.985, 56.522 136, 56.850 136 C 57.178 136, 60.608 134.495, 64.473 132.655 C 73.269 128.467, 76.498 127.311, 86.500 124.764 C 90.900 123.643, 95.175 122.331, 96 121.849 C 96.825 121.366, 98.737 120.484, 100.250 119.888 C 102.810 118.879, 104.056 117, 102.164 117 C 101.232 117, 90.741 109.064, 84.357 103.529 C 79.468 99.291, 72.275 94, 71.403 94 C 71.064 94, 69.075 92.644, 66.982 90.986 C 63.361 88.118, 57.172 85, 55.100 85 C 54.570 85, 53.265 86.237, 52.199 87.750";
 
   // ---- grid + buffers ----
-  var cols,rows,cellW,cellH,W,H,dpr,zbuf,rib,f,cx,cy;
+  var cols,rows,cellW,cellH,W,H,dpr,zbuf,rib,glint,f,cx,cy;
+  var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
   var TX,TY,TF,TW,TN=0, originX=0, originY=0;  // targets + seed-stagger + write-order stagger + origin point
   var fitS=1, fitX=0, fitY=0, logoPath=null;    // SVG→screen fit + cached vector path (set in build)
   // pen path in SVG (148x168) coords, in writing order:
@@ -128,6 +178,8 @@
     cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.textBaseline='top'; ctx.textAlign='left';
     zbuf=new Float32Array(cols*rows); rib=new Float32Array(cols*rows);
+    glint=new Float32Array(cols*rows);   // how hard this cell is catching the light, 3D
+    buildHoloField();                 // stationary diffraction field, recomputed on resize
     dispX=new Float32Array(cols*rows); dispY=new Float32Array(cols*rows);   // cursor-swipe displacement per grain
     // `scale` sizes the whole composition: it multiplies the ribbon's focal
     // length and the mark's fit by the same factor, so the two stay in
@@ -159,7 +211,7 @@
 
   // p = overall reflow progress 0..1 (0 = pure spinning ribbon, 1 = fully-formed mark)
   function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt){
-    for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;}
+    for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;glint[i]=0;}
     var N=700,M=56,du=6.2832/N,dv=2/(M-1),D=3.7,K=N*M; // dense enough to fill even extreme detail without gaps
     // a forming FRONT sweeps out from the seed point (targets ordered by distance = TF).
     // Trail tightens the front → a narrow wave that draws the mark from the seed outward.
@@ -204,6 +256,13 @@
           var depth=Math.max(0.18,Math.min(1,(D+1.7-pz)/2.4));
           var rb=(0.30+0.70*diff)*depth;
           rib[idx]=rb*(1-mmi)+mmi;   // shading → solid ink as it lands
+          // Holo only fires when the surface catches the lamp. A tight lobe on
+          // the 3D normal makes that a brief flash as the ribbon turns through
+          // the angle, and (1-mmi) retires it per character as it lands — so a
+          // fully formed mark carries no iridescence at all.
+          var nd=n[0]*Hx+n[1]*Hy+n[2]*Hz;
+          if(nd>0.0){ var g2=nd*nd; g2=g2*g2; g2=g2*g2*nd;   // ~nd^9, a narrow catch
+            glint[idx]=g2*(1.0-mmi); }
         }
       }
     }
@@ -257,6 +316,17 @@
     ctx.clearRect(0,0,W,H);
     ctx.font='700 '+(cellH*0.92)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
     ctx.fillStyle=state.ink;
+    // ---- holo: holodisc's grating equation, applied to the mark's characters.
+    // The surface-vs-half-vector term becomes a wavelength, so colour comes out
+    // of how the ribbon is turned rather than from a clock. Quantised into
+    // buckets and applied only to mark cells, so it costs a handful of
+    // fillStyle changes per frame instead of one per cell.
+    var holo=state.holo, lastFill='';
+    if(holo>0.001 && (holoCacheKey!==holo+'|'+state.ink)){
+      holoCacheKey=holo+'|'+state.ink; holoCache=new Array(32768);
+      var hx2=state.ink.replace('#','');
+      cacheInk=[parseInt(hx2.substr(0,2),16),parseInt(hx2.substr(2,2),16),parseInt(hx2.substr(4,2),16)];
+    }
     // idle motion applied HERE as continuous draw offsets → the mark floats smoothly, off the grid
     // Float = whole-shape hover (bob/drift) · Bend = how much each char warps → the shape bends/stretches
     var idle=m, RIP=cellW*0.8*state.bend;
@@ -295,6 +365,24 @@
         if(val>1)val=1;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
+        if(holo>0.001){
+          var want;
+          var amt = ribB>0.02 ? holo*glint[idx] : 0;
+          if(amt>0.012){
+            var lv=(amt*7.999/holo)|0;            // 8 strength steps, so the cache stays small
+            var key=(holoIdx[idx]<<3)|lv, cc=holoCache[key];
+            if(cc===undefined){
+              var q=holoIdx[idx], a=(lv+0.5)/8*holo;
+              var fr=((q>>8)&15)/15*255, fg=((q>>4)&15)/15*255, fb=(q&15)/15*255;
+              cc='rgb('+((cacheInk[0]+(fr-cacheInk[0])*a)|0)+','
+                       +((cacheInk[1]+(fg-cacheInk[1])*a)|0)+','
+                       +((cacheInk[2]+(fb-cacheInk[2])*a)|0)+')';
+              holoCache[key]=cc;
+            }
+            want=cc;
+          } else want=state.ink;
+          if(want!==lastFill){ ctx.fillStyle=want; lastFill=want; }
+        }
         ctx.globalAlpha=alpha>1?1:alpha;
         ctx.fillText(ch, dx, dy);
       }
