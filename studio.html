@@ -109,9 +109,19 @@
   .rowb .btn { flex: 1; }
   #status { font-size: 9px; letter-spacing: 0.1em; color: var(--dim); min-height: 12px; text-align: center; }
 
-  /* subscribers */
-  #subs { margin-top: 4px; }
-  #subs .hd { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); letter-spacing: 0.1em; }
+  /* history + subscribers */
+  #hist, #subs { margin-top: 4px; }
+  .hd { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); letter-spacing: 0.1em; }
+  #hlist { margin-top: 5px; max-height: 92px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 4px; }
+  #hlist button {
+    display: block; width: 100%; text-align: left;
+    padding: 4px 6px; margin-bottom: 2px;
+    background: none; border: 1px solid transparent; border-radius: 5px;
+    color: var(--dim); font: 10px/1.4 var(--mono);
+    font-variant-numeric: tabular-nums; cursor: pointer;
+  }
+  #hlist button:hover { color: var(--ink); border-color: rgba(255,255,255,0.14); }
+  #hlist .none { font-size: 10px; color: var(--faint); padding: 2px 6px; }
   #list {
     margin-top: 6px; max-height: 116px; overflow-y: auto;
     font-size: 10px; color: var(--dim); line-height: 1.75;
@@ -137,6 +147,10 @@
       <button class="btn thin" id="revert">revert</button>
     </div>
     <div id="status"></div>
+    <div id="hist">
+      <div class="hd"><span>previously published</span><span id="hcount">—</span></div>
+      <div id="hlist"></div>
+    </div>
     <div id="subs">
       <div class="hd"><span>subscribers</span><span id="count">—</span></div>
       <div id="list"></div>
@@ -286,7 +300,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preset }),
       });
-      if (r.ok) { published = preset; say('published'); }
+      if (r.ok) { published = preset; say('published'); loadHistory(); }
       else if (r.status === 401) { location.href = '/'; }
       else say('publish failed');
     } catch { say('no connection'); }
@@ -312,6 +326,41 @@
     await fetch('/api/logout', { method: 'POST' }).catch(() => {});
     location.href = '/';
   });
+
+  // ---- previously published: every preset a publish replaced, newest first.
+  // Clicking one loads it into the renderer but does not publish it — you still
+  // have to hit publish, so browsing history can't itself change the public page.
+  async function loadHistory() {
+    try {
+      const r = await fetch('/api/preset/history');
+      if (!r.ok) return;
+      const { history } = await r.json();
+      document.getElementById('hcount').textContent = history.length || '—';
+      const list = document.getElementById('hlist');
+      list.innerHTML = '';
+      if (!history.length) {
+        const n = document.createElement('div');
+        n.className = 'none';
+        n.textContent = 'nothing replaced yet';
+        list.appendChild(n);
+        return;
+      }
+      for (const h of history) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        const t = h.ts.slice(5, 16).replace('T', ' ');
+        b.textContent = `${t}  ${h.preset.charset || '?'} ${(h.preset.scale ?? 1)}× ${h.preset.ink || ''}`;
+        b.title = 'load into the studio (does not publish)';
+        b.addEventListener('click', () => {
+          ribbon.setState(h.preset);
+          syncPanel();
+          say('loaded — publish to make it live');
+        });
+        list.appendChild(b);
+      }
+    } catch { /* non-fatal */ }
+  }
+  loadHistory();
 
   // ---- subscribers
   try {

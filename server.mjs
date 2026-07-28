@@ -21,6 +21,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const EMAILS = path.join(DATA_DIR, 'emails.jsonl');
 const PRESET = path.join(DATA_DIR, 'preset.json');
+const HISTORY = path.join(DATA_DIR, 'preset-history.jsonl');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
@@ -219,8 +220,22 @@ const server = http.createServer(async (req, res) => {
       let preset;
       try { preset = JSON.parse(await readBody(req)).preset; } catch { return json(res, 400, { error: 'bad request' }); }
       if (!preset || typeof preset !== 'object' || Array.isArray(preset)) return json(res, 400, { error: 'bad preset' });
+      // Keep the outgoing preset before overwriting it. Publishing used to be
+      // destructive — one bad write and the previous look was unrecoverable.
+      const prev = await readPreset();
+      if (prev) await appendFile(HISTORY, JSON.stringify({ ts: new Date().toISOString(), preset: prev }) + '\n');
       await writeFile(PRESET, JSON.stringify(preset, null, 2));
       return json(res, 200, { ok: true });
+    }
+
+    if (p === '/api/preset/history' && req.method === 'GET') {
+      if (!authed(req)) return json(res, 401, { error: 'unauthorized' });
+      let rows = [];
+      try {
+        rows = (await readFile(HISTORY, 'utf8')).split('\n').filter(Boolean)
+          .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      } catch { /* nothing replaced yet */ }
+      return json(res, 200, { history: rows.slice(-30).reverse() });   // newest first
     }
 
     if (p === '/api/subscribers' && req.method === 'GET') {
