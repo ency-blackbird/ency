@@ -25,7 +25,7 @@
     twist: 1, charset: 'ascii', tempo: 1, loop: true, random: false,
     gran: 130, float: 1, bend: 1, trail: 0.35, gather: 0, reveal: 'auto',
     ambient: 1.5, chaos: 1.2, mouse: 0.5, freedom: 0.4,
-    scale: 1, holo: 0, ink: '#c0c0c0', paper: '#232323'
+    scale: 1, holo: 0, holoWide: 0.35, ink: '#c0c0c0', paper: '#232323'
   };
 
   var KEYS = Object.keys(DEFAULTS);
@@ -87,9 +87,11 @@
   function rotX(p,a){var c=Math.cos(a),s=Math.sin(a);return [p[0],c*p[1]-s*p[2],s*p[1]+c*p[2]];}
   function rotZ(p,a){var c=Math.cos(a),s=Math.sin(a);return [c*p[0]-s*p[1],s*p[0]+c*p[1],p[2]];}
   var Lx=0.35,Ly=0.5,Lz=0.79; // light dir (normalized-ish)
-  // half-vector between the light and a straight-on eye, for the grating term
-  var Hx=Lx, Hy=Ly, Hz=Lz+1.0;
-  (function(){ var l=Math.sqrt(Hx*Hx+Hy*Hy+Hz*Hz); Hx/=l; Hy/=l; Hz/=l; })();
+  // A lamp at a POSITION, not a direction. Holodisc's light is a point
+  // (u_light.xy - p), so the direction to it differs across the surface and the
+  // catch is a localised highlight that travels — rather than the whole sheet
+  // flaring at once, which is what a light-at-infinity gives you.
+  var LPx=1.7, LPy=2.0, LPz=-2.4;
 
   // Visible-spectrum wavelength (nm) to rgb — lifted from holodisc's shader so
   // the mesh iridesces off the same physics rather than a hue cycle.
@@ -210,6 +212,7 @@
   }
 
   // p = overall reflow progress 0..1 (0 = pure spinning ribbon, 1 = fully-formed mark)
+  var HOLO_EXP=11.0;   // angular tolerance of the catch, set from holoWide each frame
   function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt){
     for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;glint[i]=0;}
     var N=700,M=56,du=6.2832/N,dv=2/(M-1),D=3.7,K=N*M; // dense enough to fill even extreme detail without gaps
@@ -260,9 +263,18 @@
           // the 3D normal makes that a brief flash as the ribbon turns through
           // the angle, and (1-mmi) retires it per character as it lands — so a
           // fully formed mark carries no iridescence at all.
-          var nd=n[0]*Hx+n[1]*Hy+n[2]*Hz;
-          if(nd>0.0){ var g2=nd*nd; g2=g2*g2; g2=g2*g2*nd;   // ~nd^9, a narrow catch
-            glint[idx]=g2*(1.0-mmi); }
+          // direction from THIS shard to the lamp, so its distance and place in
+          // space matter, not just its tilt
+          var wx=LPx-pp[0], wy=LPy-pp[1], wz=LPz-pp[2];
+          var wl2=Math.sqrt(wx*wx+wy*wy+wz*wz)||1; wx/=wl2; wy/=wl2; wz/=wl2;
+          var hx2=wx, hy2=wy, hz2=wz-1.0;                   // + view dir (toward camera)
+          var hl2=Math.sqrt(hx2*hx2+hy2*hy2+hz2*hz2)||1; hx2/=hl2; hy2/=hl2; hz2/=hl2;
+          var nd=Math.abs(n[0]*hx2+n[1]*hy2+n[2]*hz2);      // two-sided sheet
+          // holoWide sets the angular tolerance: tight = a rare, precise catch,
+          // wide = the sheet picks up the lamp over a broader sweep
+          var g2=Math.pow(nd, HOLO_EXP);
+          // inverse-square falloff, so shards further from the lamp catch weaker
+          glint[idx]=g2*(1.0-mmi)*(1.0/(1.0+0.10*wl2*wl2));
         }
       }
     }
@@ -309,6 +321,7 @@
     var tilt=mp.tilt*(1-m*0.9) + Math.sin(chaosT*0.7)*0.3*state.chaos*(1-m);
     var roll=mp.rz*(1-m*0.9)   + Math.cos(chaosT*0.9)*0.35*state.chaos*(1-m);
     var tw = state.random ? mp.tw : state.twist;   // random mode varies the mesh per loop
+    HOLO_EXP=2.0+(1.0-state.holoWide)*26.0;   // 28 = tight/rare, 2 = broad
     renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos);   // swarm scatters, then reflows into the strokes
     var flowT=now/1000*0.35;
     var ramp=RAMPS[state.charset], RL=ramp.length-1;

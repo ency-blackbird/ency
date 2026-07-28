@@ -195,7 +195,10 @@
     ['color', [
       // diffraction picked up from the fixed lamp — only while the sheet is
       // turning through the angle, never on the formed mark
-      { k: 'holo',  t: 'range', min: 0, max: 1, step: 0.01, label: 'glimmer' },
+      { k: 'holo',     t: 'range', min: 0, max: 1, step: 0.01, label: 'glimmer' },
+      // angular tolerance of the catch: tight = a rare precise glint, wide = the
+      // sheet picks the lamp up over a broader sweep
+      { k: 'holoWide', t: 'range', min: 0, max: 1, step: 0.01, label: 'catch width' },
       { k: 'paper', t: 'color' },
       { k: 'ink',   t: 'color' },
     ]],
