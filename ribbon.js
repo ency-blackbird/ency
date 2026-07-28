@@ -25,7 +25,7 @@
     twist: 1, charset: 'ascii', tempo: 1, loop: true, random: false,
     gran: 130, float: 1, bend: 1, trail: 0.35, gather: 0, reveal: 'auto',
     ambient: 1.5, chaos: 1.2, mouse: 0.5, freedom: 0.4,
-    ink: '#c0c0c0', paper: '#232323'
+    scale: 1, ink: '#c0c0c0', paper: '#232323'
   };
 
   var KEYS = Object.keys(DEFAULTS);
@@ -129,11 +129,16 @@
     ctx.textBaseline='top'; ctx.textAlign='left';
     zbuf=new Float32Array(cols*rows); rib=new Float32Array(cols*rows);
     dispX=new Float32Array(cols*rows); dispY=new Float32Array(cols*rows);   // cursor-swipe displacement per grain
-    f=Math.min(W*0.60,H*0.80); cx=W/2; cy=H*0.5;
+    // `scale` sizes the whole composition: it multiplies the ribbon's focal
+    // length and the mark's fit by the same factor, so the two stay in
+    // proportion through the morph. Scaling only one would land the characters
+    // somewhere the ribbon never was.
+    var S=state.scale;
+    f=Math.min(W*0.60,H*0.80)*S; cx=W/2; cy=H*0.5;
     // rasterize the SVG fill at grid resolution → collect target cells
     var mc=document.createElement('canvas'); mc.width=cols; mc.height=rows;
     var m=mc.getContext('2d');
-    var scale=Math.min((W*0.42)/LOGO_VB[0], (H*0.66)/LOGO_VB[1]); // fit, centered
+    var scale=Math.min((W*0.42*S)/LOGO_VB[0], (H*0.66*S)/LOGO_VB[1]); // fit, centered
     var offx=(W-LOGO_VB[0]*scale)/2, offy=(H-LOGO_VB[1]*scale)/2;
     fitS=scale; fitX=offx; fitY=offy;   // remember for the write-path mapping
     m.setTransform(scale/cellW,0,0,scale/cellH, offx/cellW, offy/cellH);
@@ -331,7 +336,8 @@
             start = np - (np - start) * (v / state.tempo);
           }
           state[k] = v;
-          if (k === 'gran') needBuild = true;
+          // both re-rasterize the mark into the grid, so the targets must be rebuilt
+          if (k === 'gran' || k === 'scale') needBuild = true;
           else if (k === 'paper') applyPaper();
           else if (k === 'loop' || k === 'random' || k === 'reveal') needPlay = true;
         }

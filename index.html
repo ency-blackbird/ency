@@ -229,7 +229,8 @@
     if (r && r.ok) preset = (await r.json()).preset;
   } catch { /* fall through to defaults */ }
 
-  createRibbon({
+  // exposed for console poking, same as flowfield's window.__ff
+  window.__ribbon = createRibbon({
     canvas: document.getElementById('cv'),
     container: document.body,
     state: preset || {},

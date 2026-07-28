@@ -159,6 +159,7 @@
       { k: 'ambient', t: 'range', min: 0, max: 10, step: 0.5, fmt: v => v.toFixed(1) + 's' },
     ]],
     ['form', [
+      { k: 'scale',   t: 'range', min: 0.4, max: 2, step: 0.05, label: 'size', fmt: v => v.toFixed(2) + '×' },
       { k: 'gran',    t: 'range', min: 50, max: 520, step: 5, label: 'detail', fmt: v => String(Math.round(v)) },
       { k: 'charset', t: 'seg',   opts: [['ascii', 'ascii'], ['blocks', 'blocks'], ['binary', 'binary']] },
       { k: 'twist',   t: 'seg',   opts: [['möbius', 1], ['double', 2], ['triple', 3]] },
@@ -185,7 +186,7 @@
     if (r.ok) published = (await r.json()).preset;
   } catch { /* defaults */ }
 
-  const ribbon = createRibbon({
+  const ribbon = window.__ribbon = createRibbon({
     canvas: document.getElementById('cv'),
     container: document.body,
     state: published || {},
