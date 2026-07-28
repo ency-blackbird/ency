@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ency</title>
+<meta name="description" content="ency">
+<link rel="icon" href="/mark.svg" type="image/svg+xml">
+<style>
+  /* single, committed theme: the mesh is the page, and it is dark */
+  :root {
+    --paper: #232323;
+    --ink:   #c0c0c0;
+    --dim:   #6f6f6f;
+    --faint: #3a3a3a;
+    --mono:  ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: var(--paper); }
+  body {
+    color: var(--ink);
+    font: 12px/1.6 var(--mono);
+    letter-spacing: 0.02em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #cv { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* --- the only two things over the mesh --- */
+
+  .foot {
+    position: fixed;
+    left: 50%;
+    bottom: max(38px, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 13px;
+  }
+  .foot .line {
+    font-size: 10px;
+    letter-spacing: 0.24em;
+    color: var(--dim);
+  }
+
+  form.field {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    width: min(320px, 78vw);
+    padding: 3px 3px 3px 15px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    transition: border-color 140ms ease;
+  }
+  form.field:focus-within { border-color: rgba(255, 255, 255, 0.28); }
+  form.field input {
+    flex: 1; min-width: 0;
+    background: none; border: 0; outline: 0;
+    color: var(--ink);
+    font: 12px/1 var(--mono);
+    letter-spacing: 0.06em;
+    padding: 9px 0;
+  }
+  form.field input::placeholder { color: var(--faint); }
+  form.field button {
+    flex: none;
+    width: 29px; height: 29px;
+    display: grid; place-items: center;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--ink);
+    font: 12px/1 var(--mono);
+    cursor: pointer;
+    transition: background 140ms ease;
+  }
+  form.field button:hover { background: rgba(255, 255, 255, 0.16); }
+  form.field.done { border-color: rgba(255, 255, 255, 0.3); }
+
+  .said {
+    height: 0;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--dim);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .said.on { opacity: 1; }
+  .said.bad { color: #d08a8a; }
+
+  /* --- lock --- */
+
+  .lock {
+    position: fixed;
+    top: 18px; right: 18px;
+    z-index: 3;
+    width: 29px; height: 29px;
+    display: grid; place-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 9px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: var(--faint);
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .lock:hover, .lock:focus-visible { color: var(--ink); border-color: rgba(255,255,255,0.22); }
+  .lock svg { width: 12px; height: 12px; }
+
+  /* --- modal: the expansive version of the same glass --- */
+
+  .scrim {
+    position: fixed; inset: 0;
+    z-index: 10;
+    display: grid; place-items: center;
+    background: rgba(15, 15, 15, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+
+  .modal {
+    width: min(400px, 84vw);
+    padding: 30px 30px 26px;
+    display: flex; flex-direction: column; gap: 17px;
+    border-radius: 22px;
+    background: rgba(38, 38, 38, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    backdrop-filter: blur(34px) saturate(1.5);
+    -webkit-backdrop-filter: blur(34px) saturate(1.5);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.15),
+      0 26px 64px rgba(0, 0, 0, 0.5);
+    transform: scale(0.97);
+    transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scrim.on .modal { transform: scale(1); }
+
+  .modal .lab { font-size: 10px; letter-spacing: 0.24em; color: var(--dim); }
+  .modal .row { display: flex; gap: 8px; }
+  .modal input {
+    flex: 1; min-width: 0;
+    padding: 11px 14px;
+    background: rgba(0, 0, 0, 0.26);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: var(--ink);
+    font: 12px/1 var(--mono);
+    letter-spacing: 0.26em;
+    outline: 0;
+  }
+  .modal input:focus { border-color: rgba(255, 255, 255, 0.3); }
+  .modal input::placeholder { color: var(--faint); letter-spacing: 0.1em; }
+  .modal .go {
+    flex: none;
+    padding: 0 17px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--ink);
+    font: 11px/1 var(--mono);
+    letter-spacing: 0.12em;
+    cursor: pointer;
+  }
+  .modal .go:hover { background: rgba(255, 255, 255, 0.16); }
+  .modal .err { font-size: 10px; letter-spacing: 0.1em; color: #d08a8a; min-height: 13px; }
+
+  :focus-visible { outline: 1px solid rgba(255,255,255,0.5); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<button class="lock" id="lock" aria-label="Studio">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="4" y="10.5" width="16" height="11" rx="2.5"></rect>
+    <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path>
+  </svg>
+</button>
+
+<div class="foot">
+  <div class="line">for updates</div>
+  <form class="field" id="sub" autocomplete="on">
+    <input id="email" type="email" name="email" placeholder="email" aria-label="Email for updates" required>
+    <button type="submit" aria-label="Subscribe">→</button>
+  </form>
+  <div class="said" id="said" role="status" aria-live="polite"></div>
+</div>
+
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Studio access">
+    <div class="lab">studio</div>
+    <form class="row" id="unlock">
+      <input id="pw" type="password" placeholder="password" aria-label="Studio password" required>
+      <button class="go" type="submit">enter</button>
+    </form>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<script src="/ribbon.js"></script>
+<script>
+(async () => {
+  'use strict';
+
+  // Load the published preset before first paint so visitors never see the
+  // defaults flash over to the real settings.
+  let preset = null;
+  try {
+    const r = await Promise.race([
+      fetch('/api/preset', { headers: { accept: 'application/json' } }),
+      new Promise(res => setTimeout(() => res(null), 1500)),
+    ]);
+    if (r && r.ok) preset = (await r.json()).preset;
+  } catch { /* fall through to defaults */ }
+
+  createRibbon({
+    canvas: document.getElementById('cv'),
+    container: document.body,
+    state: preset || {},
+  });
+
+  // ---- email capture
+  const form = document.getElementById('sub');
+  const email = document.getElementById('email');
+  const said = document.getElementById('said');
+  const say = (msg, bad) => {
+    said.textContent = msg;
+    said.classList.toggle('bad', !!bad);
+    said.classList.add('on');
+  };
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const value = email.value.trim();
+    if (!value) return;
+    try {
+      const r = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: value }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (r.ok) {
+        form.classList.add('done');
+        email.value = '';
+        email.placeholder = body.already ? 'already on the list' : 'thank you';
+        say(body.already ? "you're already on the list" : 'added');
+      } else {
+        say(body.error || 'that did not go through', true);
+      }
+    } catch {
+      say('no connection', true);
+    }
+  });
+
+  // ---- lock
+  const scrim = document.getElementById('scrim');
+  const pw = document.getElementById('pw');
+  const err = document.getElementById('err');
+  const open = on => {
+    scrim.classList.toggle('on', on);
+    if (on) setTimeout(() => pw.focus(), 60); else { pw.value = ''; err.textContent = ''; }
+  };
+
+  document.getElementById('lock').addEventListener('click', () => open(true));
+  scrim.addEventListener('click', e => { if (e.target === scrim) open(false); });
+  addEventListener('keydown', e => { if (e.key === 'Escape') open(false); });
+
+  document.getElementById('unlock').addEventListener('submit', async e => {
+    e.preventDefault();
+    err.textContent = '';
+    try {
+      const r = await fetch('/api/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw.value }),
+      });
+      if (r.ok) { location.href = '/studio'; return; }
+      const body = await r.json().catch(() => ({}));
+      err.textContent = r.status === 429 ? 'too many attempts — wait a while' : (body.error || 'no');
+      pw.select();
+    } catch {
+      err.textContent = 'no connection';
+    }
+  });
+})();
+</script>
+</body>
+</html>
