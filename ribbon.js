@@ -25,7 +25,7 @@
     twist: 1, charset: 'ascii', tempo: 1, loop: true, random: false,
     gran: 130, float: 1, bend: 1, trail: 0.35, gather: 0, reveal: 'auto',
     ambient: 1.5, chaos: 1.2, mouse: 0.5, freedom: 0.4,
-    scale: 1, holo: 0, holoWide: 0.35, ink: '#c0c0c0', paper: '#232323'
+    scale: 1, holo: 0, holoWide: 0.35, recede: 1, ink: '#c0c0c0', paper: '#232323'
   };
 
   var KEYS = Object.keys(DEFAULTS);
@@ -325,7 +325,10 @@
     renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos);   // swarm scatters, then reflows into the strokes
     var flowT=now/1000*0.35;
     var ramp=RAMPS[state.charset], RL=ramp.length-1;
-    var bgFade=1-m*0.6; // faint mesh recedes as the mark forms
+    // How much the ambient field steps back as the mark lands. At 1 the backdrop
+    // is twice as bright mid-tumble as it is once formed, which reads as the whole
+    // screen breathing when the canvas is fullscreen rather than a small card.
+    var bgFade=1-m*0.6*state.recede;
     ctx.clearRect(0,0,W,H);
     ctx.font='700 '+(cellH*0.92)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
     ctx.fillStyle=state.ink;

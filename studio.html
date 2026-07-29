@@ -195,6 +195,10 @@
     ['color', [
       // diffraction picked up from the fixed lamp — only while the sheet is
       // turning through the angle, never on the formed mark
+      // how far the ambient field steps back once the mark lands. At 1 the
+      // backdrop is 2x brighter mid-tumble than formed, which reads as the
+      // screen breathing; 0 holds it steady.
+      { k: 'recede',   t: 'range', min: 0, max: 1, step: 0.01, label: 'backdrop recede' },
       { k: 'holo',     t: 'range', min: 0, max: 1, step: 0.01, label: 'glimmer' },
       // angular tolerance of the catch: tight = a rare precise glint, wide = the
       // sheet picks the lamp up over a broader sweep
