@@ -294,6 +294,22 @@
   let stage = 'gate';    // -> 'phone' once the word is right
   let gateWord = '';
 
+  // mirror of the server's rule, so a typo bounces without a round-trip:
+  // strip formatting, a bare US 10-digit gets +1, then E.164's 7–15 digits
+  function normalizePhone(raw) {
+    let s = raw.replace(/[\s().\-]/g, '');
+    if (/^\d{10}$/.test(s)) s = '+1' + s;
+    else if (/^\d{11,15}$/.test(s)) s = '+' + s;
+    return /^\+\d{7,15}$/.test(s) ? s : null;
+  }
+
+  // in the phone stage, letters never even land in the field
+  input.addEventListener('input', () => {
+    if (stage !== 'phone') return;
+    const clean = input.value.replace(/[^\d\s().+\-]/g, '');
+    if (clean !== input.value) input.value = clean;
+  });
+
   function toPhoneStage() {
     stage = 'phone';
     form.classList.remove('flash');
@@ -358,11 +374,18 @@
       return;
     }
 
+    const phone = normalizePhone(value);
+    if (!phone) {
+      say("that doesn't look like a phone number", true);
+      input.select();
+      return;
+    }
+
     try {
       const r = await fetch('/api/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: gateWord, phone: value }),
+        body: JSON.stringify({ password: gateWord, phone }),
       });
       const body = await r.json().catch(() => ({}));
       if (r.ok) {
