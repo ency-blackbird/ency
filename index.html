@@ -94,15 +94,6 @@
     100% { border-color: rgba(255,255,255,0.1); box-shadow: 0 0 0 20px rgba(255,255,255,0); }
   }
 
-  /* characters lifting off the field on their way into the mesh */
-  #glimmer { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
-  #glimmer span {
-    position: fixed;
-    color: var(--ink);
-    white-space: pre;
-    will-change: transform, opacity;
-  }
-
   .said {
     height: 0;
     font-size: 10px;
@@ -213,11 +204,11 @@
   </svg>
 </button>
 
-<div class="foot">
-  <div class="line">for updates</div>
-  <form class="field" id="sub" autocomplete="on">
-    <input id="email" type="email" name="email" placeholder="email" aria-label="Email for updates" required>
-    <button type="submit" aria-label="Subscribe">→</button>
+<div class="foot" id="foot">
+  <div class="line" id="line">say the word</div>
+  <form class="field" id="sub" autocomplete="off">
+    <input id="word" type="password" name="gate" placeholder="password" aria-label="Password" required>
+    <button type="submit" aria-label="Enter">→</button>
   </form>
   <div class="said" id="said" role="status" aria-live="polite"></div>
 </div>
@@ -234,9 +225,28 @@
 </div>
 
 <script src="/ribbon.js"></script>
+<script src="/lobby.js"></script>
 <script>
 (async () => {
   'use strict';
+
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = document.getElementById('cv');
+  const foot = document.getElementById('foot');
+  let ribbon = null, lobby = null;
+
+  // The lobby is a small panel in the corner — the mesh stays the page.
+  function bootLobby() {
+    if (lobby) return lobby;
+    if (foot.parentNode) foot.remove();
+    cv.style.opacity = '1';                          // undo the beam's dimming
+    // starts as just you; the stream corrects the count on connect
+    lobby = createLobby({ count: 1, reduced });
+    return lobby;
+  }
+
+  // Joined once from this device → the panel is already there on arrival.
+  const remembered = localStorage.getItem('ency_joined') === '1';
 
   // Load the published preset before first paint so visitors never see the
   // defaults flash over to the real settings.
@@ -250,15 +260,26 @@
   } catch { /* fall through to defaults */ }
 
   // exposed for console poking, same as flowfield's window.__ff
-  window.__ribbon = createRibbon({
-    canvas: document.getElementById('cv'),
-    container: document.body,
-    state: preset || {},
-  });
+  // try/catch so a zero-size first layout (hidden tab, restored session) can
+  // take down the mesh without taking the gate with it — its own resize
+  // handler rebuilds it once the viewport is real
+  try {
+    ribbon = window.__ribbon = createRibbon({
+      canvas: cv,
+      container: document.body,
+      state: preset || {},
+    });
+  } catch (err) {
+    console.warn('ribbon deferred:', err.message);
+  }
 
-  // ---- email capture
+  if (remembered) bootLobby();
+  else {
+
+  // ---- the gate, then the number
   const form = document.getElementById('sub');
-  const email = document.getElementById('email');
+  const input = document.getElementById('word');
+  const line = document.getElementById('line');
   const said = document.getElementById('said');
   const say = (msg, bad) => {
     said.textContent = msg;
@@ -266,84 +287,85 @@
     said.classList.add('on');
   };
 
-  // The address doesn't just vanish — its characters lift off the field and
-  // walk down the mesh's own density ramp on the way out, so it reads as being
-  // absorbed by the field rather than cleared by a form.
-  const RAMP = ' .·:-=+*ox%#@';
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let stage = 'gate';    // -> 'phone' once the word is right
+  let gateWord = '';
 
-  function glimmer(text) {
-    if (reduced || !text) return;
-    const box = email.getBoundingClientRect();
-    const cs = getComputedStyle(email);
-    const layer = document.createElement('div');
-    layer.id = 'glimmer';
-    document.body.appendChild(layer);
+  function toPhoneStage() {
+    stage = 'phone';
+    form.classList.remove('flash');
+    void form.offsetWidth;           // restart the breath if they re-enter
+    form.classList.add('flash');
+    input.value = '';
+    input.type = 'tel';
+    input.name = 'phone';
+    input.autocomplete = 'tel';
+    input.inputMode = 'tel';
+    input.placeholder = 'phone number';
+    input.setAttribute('aria-label', 'Phone number for texts');
+    line.textContent = 'your number — texts, occasionally';
+    said.classList.remove('on', 'bad');
+    said.textContent = '';
+    input.focus();
+  }
 
-    // monospace, so one measurement gives every column
-    const m = document.createElement('canvas').getContext('2d');
-    m.font = `${cs.fontSize} ${cs.fontFamily}`;
-    const advance = m.measureText('M').width + (parseFloat(cs.letterSpacing) || 0);
-    const baseline = box.top + (box.height - parseFloat(cs.fontSize)) / 2;
+  function backToGate(msg) {
+    stage = 'gate'; gateWord = '';
+    input.value = '';
+    input.type = 'password';
+    input.name = 'gate';
+    input.autocomplete = 'off';
+    input.placeholder = 'password';
+    input.setAttribute('aria-label', 'Password');
+    line.textContent = 'say the word';
+    if (msg) say(msg, true);
+  }
 
-    const chars = [...text];
-    let longest = 0;
-
-    chars.forEach((ch, i) => {
-      const s = document.createElement('span');
-      s.textContent = ch;
-      s.style.left = `${box.left + i * advance}px`;
-      s.style.top = `${baseline}px`;
-      s.style.font = `${cs.fontSize}/1 ${cs.fontFamily}`;
-      s.style.letterSpacing = cs.letterSpacing;
-      layer.appendChild(s);
-
-      const dur = 820 + Math.random() * 340;
-      const delay = i * 24;
-      longest = Math.max(longest, dur + delay);
-      const dx = (Math.random() - 0.5) * 66;
-      const dy = -(58 + Math.random() * 72);
-
-      s.animate([
-        { transform: 'translate(0,0)', opacity: 1 },
-        { transform: `translate(${dx * 0.35}px, ${dy * 0.4}px)`, opacity: 0.85, offset: 0.4 },
-        { transform: `translate(${dx}px, ${dy}px)`, opacity: 0 },
-      ], { duration: dur, delay, easing: 'cubic-bezier(0.22, 0.7, 0.3, 1)', fill: 'forwards' });
-
-      // hold the real letter briefly, then step it down the ramp to nothing
-      const started = performance.now();
-      const churn = setInterval(() => {
-        const p = (performance.now() - started - delay) / dur;
-        if (p < 0.22) return;
-        if (p >= 1) { clearInterval(churn); return; }
-        const k = Math.round((1 - (p - 0.22) / 0.78) * (RAMP.length - 1));
-        s.textContent = RAMP[Math.max(0, Math.min(RAMP.length - 1, k))];
-      }, 65);
-    });
-
-    setTimeout(() => layer.remove(), longest + 260);
+  // The beam: the field falls away and the mesh dims while the wormhole forms
+  // from its characters; your digits fly in first; then the whole tunnel
+  // collapses into the little lobby panel in the corner.
+  function beamIn(phone) {
+    localStorage.setItem('ency_joined', '1');
+    const fromRect = input.getBoundingClientRect();
+    foot.style.transition = 'opacity 450ms ease';
+    foot.style.opacity = '0';
+    cv.style.transition = 'opacity 1200ms ease';
+    cv.style.opacity = '0.35';
+    createWormhole({ text: phone, fromRect, reduced }, () => bootLobby().panel);
   }
 
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    const value = email.value.trim();
+    const value = input.value.trim();
     if (!value) return;
+
+    if (stage === 'gate') {
+      try {
+        const r = await fetch('/api/gate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: value }),
+        });
+        if (r.ok) { gateWord = value; toPhoneStage(); }
+        else if (r.status === 429) say('too many attempts — wait a while', true);
+        else { say('no', true); input.select(); }
+      } catch {
+        say('no connection', true);
+      }
+      return;
+    }
+
     try {
-      const r = await fetch('/api/subscribe', {
+      const r = await fetch('/api/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: value }),
+        body: JSON.stringify({ password: gateWord, phone: value }),
       });
       const body = await r.json().catch(() => ({}));
       if (r.ok) {
-        glimmer(value);              // before clearing, so the characters have somewhere to leave from
         form.classList.add('done');
-        form.classList.remove('flash');
-        void form.offsetWidth;       // restart the animation if they submit twice
-        form.classList.add('flash');
-        email.value = '';
-        email.placeholder = body.already ? 'already on the list' : 'thank you';
-        say(body.already ? "you're already on the list" : 'added');
+        beamIn(value);
+      } else if (r.status === 401) {
+        backToGate('the word changed — try again');   // rotated mid-session
       } else {
         say(body.error || 'that did not go through', true);
       }
@@ -351,6 +373,8 @@
       say('no connection', true);
     }
   });
+
+  }  // end gate/mesh mode
 
   // ---- lock
   const scrim = document.getElementById('scrim');
