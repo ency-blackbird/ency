@@ -308,10 +308,10 @@
     var timer = document.createElement('div');
     timer.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;user-select:none;';
     var timerDate = document.createElement('div');
-    timerDate.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#6f6f6f;' +
+    timerDate.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#ffffff;' +
       'font-variant-numeric:tabular-nums;';
     var timerClock = document.createElement('div');
-    timerClock.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#4e4e4e;' +
+    timerClock.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:rgba(255,255,255,0.75);' +
       'font-variant-numeric:tabular-nums;';
     timer.appendChild(timerDate);
     timer.appendChild(timerClock);
