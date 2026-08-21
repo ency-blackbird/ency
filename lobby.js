@@ -238,9 +238,54 @@
     opts = opts || {};
     var reduced = !!opts.reduced;
     var streamUrl = opts.stream || '/api/lobby/stream';
-    var W = 24, H = 14, S = 10, FLOOR_TOP = 3.4;
-    var PAD = { x: W * 0.5, y: H * 0.62 };
+    var W = 24, H = 14, S = 10;
+    var PAD = { x: 12.5, y: 8.5 };
     var RENDER_CAP = 150;             // bodies drawn; the counter is always true
+
+    // ---- the floor plan: a main hall with two side rooms off it, carved
+    // into a tile mask so nothing has to be an exact box
+    var FLOOR = new Uint8Array(W * H);
+    function carve(x0, y0, x1, y1) {
+      for (var y = y0; y < y1; y++) for (var x = x0; x < x1; x++) FLOOR[y * W + x] = 1;
+    }
+    carve(5, 3, 20, 13);    // main hall
+    carve(1, 6, 4, 12);     // left room
+    carve(2, 5, 4, 6);      //   its top notch
+    carve(4, 8, 5, 10);     //   doorway
+    carve(21, 4, 23, 9);    // right room
+    carve(21, 9, 22, 11);   //   its lower leg
+    carve(20, 5, 21, 7);    //   doorway
+
+    var floorTiles = [];
+    for (var fy = 0; fy < H; fy++) for (var fx = 0; fx < W; fx++)
+      if (FLOOR[fy * W + fx]) floorTiles.push({ x: fx + 0.5, y: fy + 0.5 });
+    function anyTile(filter) {
+      var t, guard = 0;
+      do { t = floorTiles[(Math.random() * floorTiles.length) | 0]; } while (filter && !filter(t) && ++guard < 40);
+      return t;
+    }
+
+    function walkable(x, y) {
+      var gx = x | 0, gy = y | 0;
+      if (x < 0 || gx >= W || y < 0 || gy >= H) return false;
+      return !!FLOOR[gy * W + gx];
+    }
+    function canStand(x, y) {
+      return walkable(x - 0.25, y) && walkable(x + 0.25, y) &&
+             walkable(x, y - 0.2) && walkable(x, y + 0.15);
+    }
+
+    // rooms + doorways: two-leg waypoint routing instead of pathfinding
+    var DOOR_L = { x: 4.5, y: 9 }, DOOR_R = { x: 20.5, y: 6 };
+    function roomOf(x) { var gx = x | 0; return gx <= 3 ? 1 : gx >= 21 ? 2 : 0; }
+    function routeTo(c, tx, ty) {
+      c.tx = tx; c.ty = ty; c.wp = [];
+      var a = roomOf(c.x), b = roomOf(tx);
+      if (a === b) return;
+      if (a === 1 || b === 1) c.wp.push(DOOR_L);
+      if (a === 2 || b === 2) c.wp.push(DOOR_R);
+      if (a === 2) c.wp.reverse();   // leaving the right room, its door comes first
+    }
 
     // ---- dom: one small window, centered — the blurred mesh plays behind it
     var panel = document.createElement('div');
@@ -267,16 +312,11 @@
     plate.textContent = '— aboard';
     panel.appendChild(plate);
 
-    function clampFloor(p) {
-      p.x = Math.max(1.2, Math.min(W - 1.2, p.x));
-      p.y = Math.max(FLOOR_TOP + 0.5, Math.min(H - 0.8, p.y));
-    }
-
     // ---- population
     var SHADES = ['#8a8a8a', '#9a9a9a', '#aaaaaa', '#7c7c7c', '#b4b4b4'];
     function makeChar(x, y, isYou) {
       return {
-        x: x, y: y, tx: x, ty: y, you: !!isYou,
+        x: x, y: y, tx: x, ty: y, wp: [], you: !!isYou,
         shade: SHADES[(Math.random() * SHADES.length) | 0],
         pause: rand(0.5, 3), speed: rand(1.1, 1.9),
         moving: false, face: 1,
@@ -295,7 +335,8 @@
       count = Math.max(1, n | 0);
       plate.textContent = count + ' aboard';
       while (chars.length < Math.min(count, RENDER_CAP)) {
-        var x = rand(2, W - 2), y = rand(FLOOR_TOP + 1, H - 1);
+        var t = anyTile();
+        var x = t.x + rand(-0.15, 0.15), y = t.y + rand(-0.15, 0.15);
         var c = makeChar(x, y, false);
         c.pause = 1.4;
         chars.push(c);
@@ -322,9 +363,17 @@
 
     function onPointerDown(e) {
       var r = panel.getBoundingClientRect();
-      you.tx = (e.clientX - r.left) / r.width * W;
-      you.ty = (e.clientY - r.top) / r.height * H;
-      if (you.ty < FLOOR_TOP + 0.5) you.ty = FLOOR_TOP + 0.5;
+      var tx = (e.clientX - r.left) / r.width * W;
+      var ty = (e.clientY - r.top) / r.height * H;
+      if (!walkable(tx, ty)) {           // tapped a wall or the void → nearest floor
+        var best = null, bd = 1e9;
+        for (var i = 0; i < floorTiles.length; i++) {
+          var ft = floorTiles[i], dd = (ft.x - tx) * (ft.x - tx) + (ft.y - ty) * (ft.y - ty);
+          if (dd < bd) { bd = dd; best = ft; }
+        }
+        tx = best.x; ty = best.y;
+      }
+      routeTo(you, tx, ty);
     }
     panel.addEventListener('pointerdown', onPointerDown);
 
@@ -344,11 +393,21 @@
     var glintTimer = rand(8, 20);
     var simT = 0, last = performance.now(), raf = 0, alive = true;
 
-    function moveToward(c, dt, speed) {
-      var dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy);
-      if (d < 0.05) { c.moving = false; return; }
-      c.x += dx / d * speed * dt; c.y += dy / d * speed * dt;
+    // walk toward the current waypoint (or the target), sliding along walls;
+    // returns false once fully arrived
+    function stepMove(c, dt, speed) {
+      var t = c.wp.length ? c.wp[0] : null;
+      var tx = t ? t.x : c.tx, ty = t ? t.y : c.ty;
+      var dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy);
+      if (d < 0.12) {
+        if (t) { c.wp.shift(); return true; }
+        c.moving = false; return false;
+      }
+      var nx = c.x + dx / d * speed * dt, ny = c.y + dy / d * speed * dt;
+      if (canStand(nx, c.y)) c.x = nx;
+      if (canStand(c.x, ny)) c.y = ny;
       c.moving = true; if (Math.abs(dx) > 0.02) c.face = dx > 0 ? 1 : -1;
+      return true;
     }
 
     function step(dt) {
@@ -361,30 +420,32 @@
       if (keys['arrowdown'] || keys['s']) vy += 1;
       if (vx || vy) {
         var n = Math.max(1, Math.hypot(vx, vy));
-        you.x += vx / n * 4.4 * dt; you.y += vy / n * 4.4 * dt;
-        you.tx = you.x; you.ty = you.y;
+        var nx = you.x + vx / n * 4.4 * dt, ny = you.y + vy / n * 4.4 * dt;
+        if (canStand(nx, you.y)) you.x = nx;
+        if (canStand(you.x, ny)) you.y = ny;
+        you.tx = you.x; you.ty = you.y; you.wp = [];
         you.moving = true; if (vx) you.face = vx > 0 ? 1 : -1;
       } else {
-        moveToward(you, dt, 4.4);
+        stepMove(you, dt, 4.4);
       }
-      clampFloor(you);
 
       for (var i = 1; i < chars.length; i++) {
         var c = chars[i];
         if (c.pause > 0) { c.pause -= dt; c.moving = false; continue; }
-        moveToward(c, dt, c.speed);
-        if (Math.hypot(c.tx - c.x, c.ty - c.y) < 0.08) {
+        if (!stepMove(c, dt, c.speed)) {
           c.pause = rand(1.5, 6);
-          if (Math.random() < 0.3) { c.tx = rand(3, W - 3); c.ty = FLOOR_TOP + rand(0.5, 1.2); }
-          else { c.tx = rand(2, W - 2); c.ty = rand(FLOOR_TOP + 0.6, H - 1); }
+          var t = Math.random() < 0.25
+            ? anyTile(function (q) { return q.y < 4.5 && roomOf(q.x) === 0; })  // drift to the consoles
+            : anyTile();
+          routeTo(c, t.x, t.y);
         }
-        clampFloor(c);
       }
 
       glintTimer -= dt;
       if (glintTimer <= 0) {
         glintTimer = rand(8, 20);
-        glints.push({ x: rand(2, W - 2), y: rand(FLOOR_TOP + 0.6, H - 1), t: 0 });
+        var gt = anyTile();
+        glints.push({ x: gt.x, y: gt.y, t: 0 });
       }
       var j;
       for (j = rings.length - 1; j >= 0; j--)  { rings[j].t  += dt; if (rings[j].t  > 1)   rings.splice(j, 1); }
@@ -393,24 +454,33 @@
     }
 
     function draw() {
-      var iw = W * S, ih = H * S;
-      ctx.fillStyle = '#1e1e1e'; ctx.fillRect(0, 0, iw, ih);
+      var iw = W * S, ih = H * S, gx, gy;
+      ctx.fillStyle = '#161616'; ctx.fillRect(0, 0, iw, ih);   // the void
 
-      // boundary walls
-      ctx.fillStyle = '#4a4a4a';
-      ctx.fillRect(0, 0, iw, 3); ctx.fillRect(0, ih - 3, iw, 3);
-      ctx.fillRect(0, 0, 3, ih); ctx.fillRect(iw - 3, 0, 3, ih);
+      // the carved floor, then a wall band wherever floor meets void
+      ctx.fillStyle = '#202020';
+      for (gy = 0; gy < H; gy++) for (gx = 0; gx < W; gx++)
+        if (FLOOR[gy * W + gx]) ctx.fillRect(gx * S, gy * S, S, S);
+      ctx.fillStyle = '#464646';
+      for (gy = 0; gy < H; gy++) for (gx = 0; gx < W; gx++) {
+        if (!FLOOR[gy * W + gx]) continue;
+        var X = gx * S, Y = gy * S;
+        if (!gy || !FLOOR[(gy - 1) * W + gx]) ctx.fillRect(X, Y - 2, S, 2);
+        if (gy === H - 1 || !FLOOR[(gy + 1) * W + gx]) ctx.fillRect(X, Y + S, S, 2);
+        if (!gx || !FLOOR[gy * W + gx - 1]) ctx.fillRect(X - 2, Y, 2, S);
+        if (gx === W - 1 || !FLOOR[gy * W + gx + 1]) ctx.fillRect(X + S, Y, 2, S);
+      }
 
-      // console strip along the top wall — the room's one landmark. Each
-      // unit's dot beeps in the mesh's diffraction colors, one phase apart.
-      for (var u = 0; u < 4; u++) {
-        var bx = 21 + u * 56;      // 4 units, 30px each, centered across 240
-        ctx.fillStyle = '#3a3a3a'; ctx.fillRect(bx, 10, 30, 19);
-        ctx.fillStyle = '#2a2a2a'; ctx.fillRect(bx + 4, 13, 22, 7);
+      // three consoles against the hall's top wall. Each unit's dot beeps in
+      // the mesh's diffraction colors, one phase apart.
+      for (var u = 0; u < 3; u++) {
+        var bx = 57 + u * 48;
+        ctx.fillStyle = '#3a3a3a'; ctx.fillRect(bx, 9, 30, 19);
+        ctx.fillStyle = '#2a2a2a'; ctx.fillRect(bx + 4, 12, 22, 7);
         ctx.fillStyle = ((simT * 2 + u) | 0) % 3
-          ? holoCss(u / 4, 0.2, simT * 0.8 + u * 2.1, 0.95)
+          ? holoCss(u / 3, 0.2, simT * 0.8 + u * 2.1, 0.95)
           : '#303030';
-        ctx.fillRect(bx + 4, 23, 3, 3);
+        ctx.fillRect(bx + 4, 22, 3, 3);
       }
 
       // the pad: the scar where the wormhole set you down

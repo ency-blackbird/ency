@@ -243,6 +243,7 @@
     cv.style.transition = animate ? 'opacity 1200ms ease, filter 1200ms ease' : 'none';
     cv.style.opacity = '1';                          // undo the beam's dimming
     cv.style.filter = 'blur(4px) brightness(0.55)';
+    if (ribbon) ribbon.setState({ mouse: 0 });       // backdrop, not a toy, while the lobby is up
     // starts as just you; the stream corrects the count on connect
     lobby = createLobby({ count: 1, reduced });
     return lobby;
