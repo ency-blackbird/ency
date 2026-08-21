@@ -320,6 +320,7 @@
         shade: SHADES[(Math.random() * SHADES.length) | 0],
         pause: rand(0.5, 3), speed: rand(1.1, 1.9),
         moving: false, face: 1,
+        busy: 0, hugWith: null, gun: false,
       };
     }
 
@@ -329,6 +330,81 @@
 
     var count = Math.max(1, opts.count | 0);
     var rings = [], floats = [], glints = [];
+
+    // ---- hugs and muskets
+    var hearts = [], confetti = [];
+    var hugCd = 0, flash = 0;
+    var HUG_T = 1.2;
+    var HEART = [[1,0],[3,0],[0,1],[1,1],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[2,3]];
+
+    // muskets hang on the side-room walls; C (or a tap) takes one down
+    var RACKS = [
+      { x: 1.55,  y: 7.5, side: 1,  taken: false },
+      { x: 1.55,  y: 9.5, side: 1,  taken: false },
+      { x: 22.45, y: 5.5, side: -1, taken: false },
+      { x: 22.45, y: 7.5, side: -1, taken: false },
+    ];
+
+    // confetti is the one place the full spectrum fires — straight off the
+    // same wavelength ramp as everything else
+    var CONF = [];
+    for (var cw = 400; cw <= 680; cw += 40) {
+      var cc = wl2rgb(cw);
+      CONF.push('rgb(' + ((cc[0] * 255) | 0) + ',' + ((cc[1] * 255) | 0) + ',' + ((cc[2] * 255) | 0) + ')');
+    }
+
+    function nearestStranger(maxD) {
+      var best = null, bd = maxD;
+      for (var i = 1; i < chars.length; i++) {
+        var c = chars[i];
+        if (c.busy > 0) continue;
+        var d = Math.hypot(c.x - you.x, c.y - you.y);
+        if (d < bd) { bd = d; best = c; }
+      }
+      return best;
+    }
+
+    function tryHug() {
+      if (you.busy > 0 || hugCd > 0) return;
+      var c = nearestStranger(1.4);
+      if (!c) return;
+      you.busy = c.busy = HUG_T; hugCd = HUG_T + 0.4;
+      you.face = c.x > you.x ? 1 : -1; c.face = -you.face;
+      you.tx = you.x; you.ty = you.y; you.wp = [];
+      you.hugWith = c; c.hugWith = you;
+      c.pause = 2.5;
+      hearts.push({ x: (you.x + c.x) / 2, y: Math.min(you.y, c.y) - 1.1, t: 0 });
+    }
+
+    function tryGun() {
+      if (you.busy > 0) return;
+      if (!you.gun) {
+        for (var i = 0; i < RACKS.length; i++) {
+          var r = RACKS[i];
+          if (!r.taken && Math.hypot(r.x - you.x, r.y - you.y) < 1.8) {
+            r.taken = true; you.gun = true;
+            return;
+          }
+        }
+        return;             // nothing on the wall near you, nothing in hand
+      }
+      flash = 0.07;
+      var dir = you.face;
+      var mx = you.x + dir * 0.7, my = you.y - 0.45;
+      for (var p = 0; p < 24; p++) {
+        var a = rand(-0.75, 0.15);                 // mostly upward, out of the muzzle
+        var sp = rand(3.5, 9);
+        confetti.push({
+          x: mx, y: my,
+          vx: dir * Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          t: 0, life: rand(0.8, 1.5),
+          c: CONF[(Math.random() * CONF.length) | 0],
+        });
+      }
+      var bx2 = you.x - dir * 0.18;                // recoil
+      if (canStand(bx2, you.y)) you.x = bx2;
+    }
 
     function syncCount(n, celebrate) {
       var prev = count;
@@ -352,10 +428,12 @@
     var keys = {};
     function onKeyDown(e) {
       if (/^(input|textarea|select)$/i.test(e.target.tagName)) return;  // the studio modal types here
+      if (e.metaKey || e.ctrlKey || e.altKey) return;                   // keep copy/paste etc. intact
       var k = e.key.toLowerCase();
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].indexOf(k) >= 0) {
         keys[k] = true; e.preventDefault();
-      }
+      } else if (k === 'x') { tryHug(); e.preventDefault(); }
+      else if (k === 'c') { tryGun(); e.preventDefault(); }
     }
     function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
     addEventListener('keydown', onKeyDown);
@@ -365,6 +443,18 @@
       var r = panel.getBoundingClientRect();
       var tx = (e.clientX - r.left) / r.width * W;
       var ty = (e.clientY - r.top) / r.height * H;
+
+      // taps can do what X and C do: hug a neighbor, take a musket, fire
+      var s = nearestStranger(1.4);
+      if (s && Math.hypot(s.x - tx, s.y - ty) < 0.9) { tryHug(); return; }
+      if (!you.gun) {
+        for (var ri = 0; ri < RACKS.length; ri++) {
+          var rk = RACKS[ri];
+          if (!rk.taken && Math.hypot(rk.x - tx, rk.y - ty) < 1 &&
+              Math.hypot(rk.x - you.x, rk.y - you.y) < 1.8) { tryGun(); return; }
+        }
+      } else if (Math.hypot(you.x - tx, you.y - ty) < 1) { tryGun(); return; }
+
       if (!walkable(tx, ty)) {           // tapped a wall or the void → nearest floor
         var best = null, bd = 1e9;
         for (var i = 0; i < floorTiles.length; i++) {
@@ -412,13 +502,18 @@
 
     function step(dt) {
       simT += dt;
+      if (hugCd > 0) hugCd -= dt;
+      if (flash > 0) flash -= dt;
 
       var vx = 0, vy = 0;
       if (keys['arrowleft'] || keys['a']) vx -= 1;
       if (keys['arrowright'] || keys['d']) vx += 1;
       if (keys['arrowup'] || keys['w']) vy -= 1;
       if (keys['arrowdown'] || keys['s']) vy += 1;
-      if (vx || vy) {
+      if (you.busy > 0) {
+        you.busy -= dt; you.moving = false;
+        if (you.busy <= 0) you.hugWith = null;
+      } else if (vx || vy) {
         var n = Math.max(1, Math.hypot(vx, vy));
         var nx = you.x + vx / n * 4.4 * dt, ny = you.y + vy / n * 4.4 * dt;
         if (canStand(nx, you.y)) you.x = nx;
@@ -431,6 +526,11 @@
 
       for (var i = 1; i < chars.length; i++) {
         var c = chars[i];
+        if (c.busy > 0) {
+          c.busy -= dt; c.moving = false;
+          if (c.busy <= 0) c.hugWith = null;
+          continue;
+        }
         if (c.pause > 0) { c.pause -= dt; c.moving = false; continue; }
         if (!stepMove(c, dt, c.speed)) {
           c.pause = rand(1.5, 6);
@@ -451,6 +551,15 @@
       for (j = rings.length - 1; j >= 0; j--)  { rings[j].t  += dt; if (rings[j].t  > 1)   rings.splice(j, 1); }
       for (j = floats.length - 1; j >= 0; j--) { floats[j].t += dt; if (floats[j].t > 1.4) floats.splice(j, 1); }
       for (j = glints.length - 1; j >= 0; j--) { glints[j].t += dt; if (glints[j].t > 0.7) glints.splice(j, 1); }
+      for (j = hearts.length - 1; j >= 0; j--) { hearts[j].t += dt; if (hearts[j].t > 1.2) hearts.splice(j, 1); }
+      for (j = confetti.length - 1; j >= 0; j--) {
+        var p = confetti[j];
+        p.t += dt;
+        if (p.t > p.life) { confetti.splice(j, 1); continue; }
+        p.vy += 10 * dt;                 // gravity
+        p.vx *= (1 - 1.6 * dt);          // drag
+        p.x += p.vx * dt; p.y += p.vy * dt;
+      }
     }
 
     function draw() {
@@ -487,6 +596,18 @@
       ctx.strokeStyle = 'rgba(200,200,200,0.35)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(PAD.x * S, PAD.y * S, 11, 0, 7); ctx.stroke();
 
+      // muskets on the side-room walls, waiting on their pegs
+      for (var rr2 = 0; rr2 < RACKS.length; rr2++) {
+        var rk = RACKS[rr2];
+        if (rk.taken) continue;
+        var rx = rk.side > 0 ? Math.round((rk.x - 0.45) * S) : Math.round((rk.x + 0.45) * S) - 10;
+        var ry = Math.round(rk.y * S) - 5;
+        ctx.fillStyle = '#3a3a3a';
+        ctx.fillRect(rx + 2, ry - 1, 1, 3); ctx.fillRect(rx + 7, ry - 1, 1, 3);   // pegs
+        ctx.fillStyle = '#9a9a9a'; ctx.fillRect(rx, ry, 10, 1);                    // barrel
+        ctx.fillStyle = '#565656'; ctx.fillRect(rk.side > 0 ? rx : rx + 7, ry + 1, 3, 2);  // stock
+      }
+
       // viewport corner brackets
       ctx.fillStyle = 'rgba(255,255,255,0.16)';
       var B = 7;
@@ -499,7 +620,12 @@
       var sorted = chars.slice().sort(function (a, b) { return a.y - b.y; });
       for (var i = 0; i < sorted.length; i++) {
         var c = sorted[i];
-        var x = Math.round(c.x * S), y = Math.round(c.y * S);
+        var lean = 0;
+        if (c.busy > 0 && c.hugWith) {   // hugging pairs lean into each other
+          var hp = Math.min(1, (HUG_T - c.busy) / HUG_T);
+          lean = Math.round(Math.sin(hp * Math.PI) * 2) * (c.hugWith.x >= c.x ? 1 : -1);
+        }
+        var x = Math.round(c.x * S) + lean, y = Math.round(c.y * S);
         var f = c.moving && !reduced ? ((simT * 7 + c.x * 3) | 0) % 2 : 0;
         ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x - 1, y, 3, 1);
         ctx.fillStyle = c.you ? '#ffffff' : c.shade;
@@ -507,9 +633,39 @@
         ctx.fillRect(x - 1, y - 6, 2, 2);                       // head
         if (f) ctx.fillRect(x - 1 + (c.face > 0 ? 1 : -1), y - 1, 1, 1);  // step
         if (c.you) {
-          ctx.fillRect(x + (c.face > 0 ? 2 : -3), y - 4, 1, 1); // heading wedge
+          if (c.gun) {                                          // the musket, carried
+            ctx.fillStyle = '#9a9a9a';
+            ctx.fillRect(x + (c.face > 0 ? 1 : -6), y - 4, 6, 1);
+            ctx.fillStyle = '#565656';
+            ctx.fillRect(x + (c.face > 0 ? 1 : -2), y - 3, 2, 1);
+            ctx.fillStyle = '#ffffff';
+          } else {
+            ctx.fillRect(x + (c.face > 0 ? 2 : -3), y - 4, 1, 1); // heading wedge
+          }
           if (((simT * 2) | 0) % 2 === 0) ctx.fillRect(x - 1, y - 9, 2, 1);
+          if (flash > 0 && c.gun) {                             // muzzle flash
+            ctx.fillRect(x + (c.face > 0 ? 7 : -9), y - 5, 2, 2);
+          }
         }
+      }
+
+      // confetti — the only full-spectrum moment in the room
+      for (var pc = 0; pc < confetti.length; pc++) {
+        var pp = confetti[pc];
+        ctx.fillStyle = pp.c;
+        ctx.globalAlpha = Math.min(1, (pp.life - pp.t) / 0.3);
+        if (((pp.t * 16) | 0) % 2) ctx.fillRect((pp.x * S) | 0, (pp.y * S) | 0, 2, 1);
+        else ctx.fillRect((pp.x * S) | 0, (pp.y * S) | 0, 1, 2);
+      }
+      ctx.globalAlpha = 1;
+
+      // hearts, floating off the hugs
+      for (var hh = 0; hh < hearts.length; hh++) {
+        var hv = hearts[hh];
+        var hxp = Math.round(hv.x * S) - 2, hyp = Math.round(hv.y * S - hv.t * 7);
+        ctx.fillStyle = holoCss(hv.x / W, hv.y / H, simT, Math.max(0, 1 - hv.t / 1.2));
+        for (var hq = 0; hq < HEART.length; hq++)
+          ctx.fillRect(hxp + HEART[hq][0], hyp + HEART[hq][1], 1, 1);
       }
 
       // holo, where it's allowed: joins and the rare glint
