@@ -325,6 +325,15 @@
     plate.textContent = '— aboard';
     panel.appendChild(plate);
 
+    // the action nudge — crisp DOM text floated over the map, never canvas
+    var tipEl = document.createElement('div');
+    tipEl.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;' +
+      'font:9px/1 ' + MONO + ';letter-spacing:0.14em;color:rgba(212,212,212,0.92);' +
+      'text-shadow:0 1px 3px rgba(0,0,0,0.9);transform:translate(-50%,-100%);' +
+      'opacity:0;transition:opacity 160ms ease;pointer-events:none;';
+    panel.appendChild(tipEl);
+    var tipHold = 0;
+
     // ---- population
     var SHADES = ['#8a8a8a', '#9a9a9a', '#aaaaaa', '#7c7c7c', '#b4b4b4'];
     function makeChar(x, y, isYou) {
@@ -333,7 +342,7 @@
         shade: SHADES[(Math.random() * SHADES.length) | 0],
         pause: rand(0.5, 3), speed: rand(1.1, 1.9),
         moving: false, face: 1,
-        busy: 0, hugWith: null, gun: false, hop: 0,
+        busy: 0, hugWith: null, gun: false, hop: 0, noticeCd: 0,
       };
     }
 
@@ -529,7 +538,7 @@
       rem -= days * 86400000;
       var hh = (rem / 3600000) | 0, mm = ((rem / 60000) | 0) % 60, ss = ((rem / 1000) | 0) % 60;
       var c = now.getSeconds() % 2 ? ' ' : ':';       // the blink
-      timer.textContent = months + ' mo ' + days + ' d ' + two(hh) + c + two(mm) + c + two(ss) + '  nov 13';
+      timer.textContent = months + ' mo ' + days + ' d ' + two(hh) + c + two(mm) + c + two(ss);
     }
 
     // walk toward the current waypoint (or the target), sliding along walls;
@@ -576,6 +585,7 @@
       for (var i = 1; i < chars.length; i++) {
         var c = chars[i];
         if (c.hop > 0) c.hop -= dt;
+        if (c.noticeCd > 0) c.noticeCd -= dt;
         if (c.busy > 0) {
           c.busy -= dt; c.moving = false;
           if (c.busy <= 0) c.hugWith = null;
@@ -585,6 +595,15 @@
           c.pause -= dt; c.moving = false;
           // idle strangers notice you when you're close
           if (Math.hypot(you.x - c.x, you.y - c.y) < 2.2) c.face = you.x >= c.x ? 1 : -1;
+          continue;
+        }
+        // a stranger walking past stops for a beat when you come close,
+        // the way a person does — then carries on and won't re-startle soon
+        if (c.noticeCd <= 0 && Math.hypot(you.x - c.x, you.y - c.y) < 1.9) {
+          c.pause = rand(0.7, 1.4);
+          c.face = you.x >= c.x ? 1 : -1;
+          c.noticeCd = rand(6, 12);
+          c.moving = false;
           continue;
         }
         if (!stepMove(c, dt, c.speed)) {
@@ -624,6 +643,7 @@
         }
       }
       if (gunHintT > 0) gunHintT -= dt;
+      if (tipHold > 0) tipHold -= dt;
 
       glintTimer -= dt;
       if (glintTimer <= 0) {
@@ -736,25 +756,30 @@
         }
       }
 
-      // a nudge when an action is in reach — one at a time, nearest first
+      // a nudge when an action is in reach — one at a time, nearest first;
+      // once shown it holds for a second rather than flickering off
       var tip = null;
       var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
-      if (ns) tip = { x: ns.x, y: ns.y - 1.5, s: (touch ? 'tap' : 'x') + ' · hug' };
+      if (ns) tip = { x: ns.x, y: ns.y - 1.1, s: (touch ? 'tap' : 'x') + ' · hug' };
       else if (!you.gun) {
         for (var ti = 0; ti < RACKS.length; ti++) {
           var tr = RACKS[ti];
           if (!tr.taken && Math.hypot(tr.x - you.x, tr.y - you.y) < 1.8) {
-            tip = { x: tr.x + tr.side * 0.8, y: tr.y - 1.1, s: (touch ? 'tap' : 'c') + ' · take' };
+            tip = { x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
             break;
           }
         }
       } else if (gunHintT > 0) {
-        tip = { x: you.x, y: you.y - 1.6, s: (touch ? 'tap' : 'c') + ' · fire' };
+        tip = { x: you.x, y: you.y - 1.2, s: (touch ? 'tap' : 'c') + ' · fire' };
       }
       if (tip) {
-        ctx.font = '6px ' + MONO; ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(200,200,200,0.8)';
-        ctx.fillText(tip.s, Math.round(tip.x * S), Math.round(tip.y * S));
+        tipHold = 1;
+        tipEl.textContent = tip.s;
+        tipEl.style.left = Math.max(9, Math.min(91, tip.x / W * 100)) + '%';
+        tipEl.style.top = (tip.y / H * 100) + '%';
+        tipEl.style.opacity = '1';
+      } else if (tipHold <= 0) {
+        tipEl.style.opacity = '0';
       }
 
       // confetti — the only full-spectrum moment in the room
