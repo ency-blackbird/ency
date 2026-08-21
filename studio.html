@@ -113,8 +113,8 @@
   .rowb .btn { flex: 1; }
   #status { font-size: 9px; letter-spacing: 0.1em; color: var(--dim); min-height: 12px; text-align: center; }
 
-  /* history + subscribers */
-  #hist, #subs { margin-top: 4px; }
+  /* history + subscribers + numbers */
+  #hist, #subs, #nums { margin-top: 4px; }
   .hd { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); letter-spacing: 0.1em; }
   #hlist { margin-top: 5px; max-height: 92px; overflow-y: auto; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 4px; }
   #hlist button {
@@ -126,13 +126,13 @@
   }
   #hlist button:hover { color: var(--ink); border-color: rgba(255,255,255,0.14); }
   #hlist .none { font-size: 10px; color: var(--faint); padding: 2px 6px; }
-  #list {
+  #list, #plist {
     margin-top: 6px; max-height: 116px; overflow-y: auto;
     font-size: 10px; color: var(--dim); line-height: 1.75;
     border-top: 1px solid rgba(255,255,255,0.06); padding-top: 5px;
     user-select: text; word-break: break-all;
   }
-  #list div { font-variant-numeric: tabular-nums; }
+  #list div, #plist div { font-variant-numeric: tabular-nums; }
 
   :focus-visible { outline: 1px solid rgba(255,255,255,0.5); outline-offset: 2px; }
 </style>
@@ -158,6 +158,10 @@
     <div id="subs">
       <div class="hd"><span>subscribers</span><span id="count">—</span></div>
       <div id="list"></div>
+    </div>
+    <div id="nums">
+      <div class="hd"><span>numbers</span><span id="pcount">—</span></div>
+      <div id="plist"></div>
     </div>
     <button class="btn thin" id="logout">log out</button>
   </div>
@@ -387,6 +391,22 @@
       else for (const s of subscribers.slice().reverse()) {
         const row = document.createElement('div');
         row.textContent = `${s.ts.slice(0, 10)}  ${s.email}`;
+        list.appendChild(row);
+      }
+    }
+  } catch { /* non-fatal */ }
+
+  // ---- numbers (the lobby's list — this panel is the only place they show)
+  try {
+    const r = await fetch('/api/phones');
+    if (r.ok) {
+      const { count, phones } = await r.json();
+      document.getElementById('pcount').textContent = count;
+      const list = document.getElementById('plist');
+      if (!count) list.textContent = 'none yet';
+      else for (const s of phones.slice().reverse()) {
+        const row = document.createElement('div');
+        row.textContent = `${s.ts.slice(0, 10)}  ${s.phone}`;
         list.appendChild(row);
       }
     }
