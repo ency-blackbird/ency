@@ -287,15 +287,28 @@
       if (a === 2) c.wp.reverse();   // leaving the right room, its door comes first
     }
 
-    // ---- dom: one small window, centered — the blurred mesh plays behind it
+    // ---- dom: a small centered window, the countdown hanging under it —
+    // the blurred mesh plays on behind both
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;' +
+      'display:flex;flex-direction:column;align-items:center;gap:11px;' +
+      'opacity:0;transition:opacity 700ms ease;';
+    document.body.appendChild(wrap);
+
     var panel = document.createElement('div');
-    panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;' +
+    panel.style.cssText = 'position:relative;' +
       'width:min(400px, 86vw);aspect-ratio:12/7;border-radius:16px;overflow:hidden;' +
       'border:1px solid rgba(255,255,255,0.13);background:#1c1c1c;' +
       'box-shadow:inset 0 1px 0 rgba(255,255,255,0.1), 0 26px 64px rgba(0,0,0,0.5);' +
-      'opacity:0;transition:opacity 700ms ease;' +
       'touch-action:none;user-select:none;-webkit-user-select:none;';
-    document.body.appendChild(panel);
+    wrap.appendChild(panel);
+
+    // months, days, then the seconds ticking down to november 13 — the colon
+    // blinks once a second. Crisp DOM text in the site's own mono, not canvas.
+    var timer = document.createElement('div');
+    timer.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#6f6f6f;' +
+      'font-variant-numeric:tabular-nums;user-select:none;';
+    wrap.appendChild(timer);
 
     var cv = document.createElement('canvas');
     cv.width = W * S; cv.height = H * S;
@@ -495,18 +508,28 @@
     var glintTimer = rand(8, 20);
     var simT = 0, last = performance.now(), raf = 0, alive = true;
 
-    // months-and-days until the 13th of november, whichever one is next
-    var cd = null, cdAt = -99;
-    function countdown() {
+    // time until the 13th of november, whichever one is next: whole calendar
+    // months, then days, then the hh:mm:ss remainder
+    var lastSec = 0;
+    function two(n) { return n < 10 ? '0' + n : '' + n; }
+    function tickTimer() {
       var now = new Date();
       var target = new Date(now.getFullYear(), 10, 13);
       if (target <= now) target = new Date(now.getFullYear() + 1, 10, 13);
       var months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
-      var probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate());
-      if (probe > target) { months--; probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate()); }
-      // round, not ceil: the DST hour in between must not add a day
-      var days = Math.round((target - probe) / 86400000);
-      return { m: months, d: days };
+      var probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate(),
+                           now.getHours(), now.getMinutes(), now.getSeconds());
+      if (probe > target) {
+        months--;
+        probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate(),
+                         now.getHours(), now.getMinutes(), now.getSeconds());
+      }
+      var rem = Math.max(0, target - probe);
+      var days = (rem / 86400000) | 0;
+      rem -= days * 86400000;
+      var hh = (rem / 3600000) | 0, mm = ((rem / 60000) | 0) % 60, ss = ((rem / 1000) | 0) % 60;
+      var c = now.getSeconds() % 2 ? ' ' : ':';       // the blink
+      timer.textContent = months + ' mo ' + days + ' d ' + two(hh) + c + two(mm) + c + two(ss) + '  nov 13';
     }
 
     // walk toward the current waypoint (or the target), sliding along walls;
@@ -652,27 +675,19 @@
         ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(rcx, rcy, 4.5, 0, 7); ctx.stroke();     // a groove
         ctx.fillStyle = '#6a6a6a'; ctx.fillRect(rcx - 1, 17.5, 2, 2);    // the label
-        var ra = reduced ? u * 2 : simT * (1.7 + u * 0.5) + u * 2;
-        ctx.fillStyle = '#a0a0a0';                                       // the glint riding the groove
-        ctx.fillRect(Math.round(rcx + Math.cos(ra) * 4.5), Math.round(rcy + Math.sin(ra) * 4.5), 1, 1);
+        // the glint rides the groove at subpixel positions with a short
+        // trail, so the spin reads smooth instead of stepping tile to tile
+        var ra = reduced ? u * 2 : simT * (1.2 + u * 0.35) + u * 2;
+        for (var g2 = 0; g2 < 3; g2++) {
+          var aa = ra - g2 * 0.22;
+          ctx.fillStyle = 'rgba(170,170,170,' + (0.9 - g2 * 0.3) + ')';
+          ctx.fillRect(rcx + Math.cos(aa) * 4.5 - 0.5, rcy + Math.sin(aa) * 4.5 - 0.5, 1, 1);
+        }
         ctx.fillStyle = ((simT * 2 + u) | 0) % 3
           ? holoCss(u / 3, 0.2, simT * 0.8 + u * 2.1, 0.95)
           : '#303030';
         ctx.fillRect(bx + 3, 22, 3, 3);
       }
-
-      // the countdown, painted on the floor where nothing else lives
-      if (simT - cdAt > 30 || !cd) { cd = countdown(); cdAt = simT; }
-      ctx.font = '8px ' + MONO; ctx.textAlign = 'center';
-      ctx.fillStyle = '#5a5a5a';
-      ctx.fillText(cd.m + ' mo ' + cd.d + ' d', 166, 114);
-      ctx.font = '6px ' + MONO;
-      ctx.fillStyle = '#3e3e3e';
-      ctx.fillText('nov 13', 166, 122);
-
-      // the pad: the scar where the wormhole set you down
-      ctx.strokeStyle = 'rgba(200,200,200,0.35)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(PAD.x * S, PAD.y * S, 11, 0, 7); ctx.stroke();
 
       // muskets on the side-room walls, waiting on their pegs
       for (var rr2 = 0; rr2 < RACKS.length; rr2++) {
@@ -685,14 +700,6 @@
         ctx.fillStyle = '#9a9a9a'; ctx.fillRect(rx, ry, 10, 1);                    // barrel
         ctx.fillStyle = '#565656'; ctx.fillRect(rk.side > 0 ? rx : rx + 7, ry + 1, 3, 2);  // stock
       }
-
-      // viewport corner brackets
-      ctx.fillStyle = 'rgba(255,255,255,0.16)';
-      var B = 7;
-      ctx.fillRect(6, 6, B, 2); ctx.fillRect(6, 6, 2, B);
-      ctx.fillRect(iw - 6 - B, 6, B, 2); ctx.fillRect(iw - 8, 6, 2, B);
-      ctx.fillRect(6, ih - 8, B, 2); ctx.fillRect(6, ih - 6 - B, 2, B);
-      ctx.fillRect(iw - 6 - B, ih - 8, B, 2); ctx.fillRect(iw - 8, ih - 6 - B, 2, B);
 
       // bodies, back to front
       var sorted = chars.slice().sort(function (a, b) { return a.y - b.y; });
@@ -793,10 +800,13 @@
       var dt = Math.min(0.05, (now - last) / 1000); last = now;
       step(dt);
       draw();
+      var sec = (Date.now() / 1000) | 0;
+      if (sec !== lastSec) { lastSec = sec; tickTimer(); }
       raf = requestAnimationFrame(frame);
     }
 
-    requestAnimationFrame(function () { panel.style.opacity = '1'; });
+    tickTimer();
+    requestAnimationFrame(function () { wrap.style.opacity = '1'; });
     raf = requestAnimationFrame(frame);
 
     return {
@@ -808,7 +818,7 @@
         if (es) es.close();
         removeEventListener('keydown', onKeyDown);
         removeEventListener('keyup', onKeyUp);
-        panel.remove();
+        wrap.remove();
       },
     };
   }
