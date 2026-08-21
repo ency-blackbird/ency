@@ -4,10 +4,14 @@
  * same monospace, same ink-on-paper, and the holo math ported straight from
  * ribbon.js so any flash of color is the site's actual iridescence):
  *
- *   createWormhole(opts, onDone)  the beam-in: the mesh's characters collapse
- *                                 into a spiral tunnel, your digits fly in
- *                                 first — then the whole tunnel collapses
- *                                 into the little lobby panel.
+ *   createWormhole(opts, onDone)  the beam-in, played as a boot sequence:
+ *                                 targeting brackets snap in, a log types on,
+ *                                 your number is read out and struck through,
+ *                                 a hexagonal iris dilates in counted steps —
+ *                                 hard cuts throughout, nothing eases — then
+ *                                 two frames of inversion and the throat
+ *                                 swallows the screen and collapses into the
+ *                                 lobby panel.
  *
  *   createLobby(opts)             a small HUD-minimap window, centered, with
  *                                 the mesh playing on behind it. Grayscale,
@@ -79,35 +83,32 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     var CX = vw / 2, CY = vh / 2;
-    var R0 = Math.min(vw, vh) * 0.2;
-    var DUR = reduced ? 900 : 2700;
+    var R0 = Math.min(vw, vh) * 0.24;
+    var DUR = reduced ? 900 : 3400;
 
-    // the collapsing swarm: mesh-flavored characters pulled off the page into
-    // the ring — they orbit tighter as they fall in
-    var N = reduced ? 0 : 240;
-    var swarm = [];
-    for (var i = 0; i < N; i++) {
-      swarm.push({
-        r: rand(R0 * 1.6, Math.hypot(vw, vh) * 0.62),
-        a: rand(0, Math.PI * 2),
-        spin: rand(1.6, 3.4) * (Math.random() < 0.5 ? -1 : 1),
-        fall: rand(0.55, 1),
-        ch: RAMP[3 + ((Math.random() * 6) | 0)],
-      });
-    }
+    // Eva's core move: nothing eases. Motion advances in discrete steps.
+    function snapT(t, fps) { return Math.floor(t * fps) / fps; }
+    function built(t, a, b, n) { return Math.max(0, Math.min(n, Math.floor((t - a) / (b - a) * n + 1e-6))); }
 
-    // your digits, flying from the field into the hole first
-    var digits = [];
-    if (from && text && !reduced) {
-      var adv = Math.min(11, (from.width - 8) / Math.max(1, text.length));
-      for (var d = 0; d < text.length; d++) {
-        digits.push({
-          x: from.left + 10 + d * adv,
-          y: from.top + from.height / 2,
-          ch: text[d],
-          delay: d * 26,
-        });
+    var LOG = [
+      [0.00, 'word accepted'],
+      [0.18, 'number bound'],
+      [0.36, 'route: lobby'],
+      [0.62, 'aperture forming'],
+      [1.10, 'hex iris: armed'],
+      [1.90, 'transit in 3'],
+      [2.10, 'transit in 2'],
+      [2.30, 'transit in 1'],
+    ];
+
+    function hexPath(r, rot) {
+      ctx.beginPath();
+      for (var i = 0; i < 6; i++) {
+        var a = rot + i / 6 * Math.PI * 2;
+        var x = CX + Math.cos(a) * r, y = CY + Math.sin(a) * r;
+        if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
       }
+      ctx.closePath();
     }
 
     var t0 = performance.now();
@@ -115,86 +116,117 @@
 
     function frame(now) {
       if (done) return;
-      var t = (now - t0) / DUR;                    // 0..1 over the whole beam
-      if (t >= 1) { finish(); return; }
+      var t = (now - t0) / 1000;                   // seconds into the beam
+      if (t >= DUR / 1000) { finish(); return; }
       ctx.clearRect(0, 0, vw, vh);
 
       if (reduced) {                               // reduced motion: a plain iris
-        var rr = Math.hypot(vw, vh) * 0.6 * (1 - t);
+        var rr = Math.hypot(vw, vh) * 0.6 * (1 - t / (DUR / 1000));
         ctx.fillStyle = '#161616';
         ctx.beginPath(); ctx.arc(CX, CY, Math.max(0, rr), 0, 7); ctx.fill();
         requestAnimationFrame(frame);
         return;
       }
 
-      var shake = t > 0.35 ? Math.min(1, (t - 0.35) / 0.4) * 2.4 : 0;
-      ctx.save();
-      ctx.translate(rand(-shake, shake), rand(-shake, shake));
-      ctx.font = '13px ' + MONO;
-      ctx.textAlign = 'center';
+      // a dark veil so the instruments read; the dimmed mesh ghosts through
+      ctx.fillStyle = 'rgba(28,28,28,0.72)';
+      ctx.fillRect(0, 0, vw, vh);
 
-      // the hole itself: opens from nothing, darker than the paper
-      var hole = Math.min(1, t / 0.3);
-      var holeR = R0 * 0.55 * hole * (1 + Math.max(0, t - 0.55) * 6);
-      ctx.fillStyle = '#141414';
-      ctx.beginPath(); ctx.arc(CX, CY, holeR, 0, 7); ctx.fill();
-
-      // swarm collapsing into orbit
-      for (var i = 0; i < swarm.length; i++) {
-        var s = swarm[i];
-        var p = Math.min(1, t / (0.85 * s.fall + 0.15));
-        var ease = 1 - Math.pow(1 - p, 2.6);
-        var r = s.r + (R0 - s.r) * ease;
-        var a = s.a + s.spin * t * (1 + ease * 2.2);
-        var x = CX + Math.cos(a) * r, y = CY + Math.sin(a) * r * 0.86;
-        var k = Math.round((1 - ease * 0.75) * (RAMP.length - 1));
-        ctx.fillStyle = 'rgba(192,192,192,' + (0.16 + ease * 0.5) + ')';
-        ctx.fillText(RAMP[Math.max(2, k)], x, y);
+      // corner targeting brackets: snap in one by one
+      var m = Math.max(18, Math.min(34, vw * 0.03));
+      var L = 30;
+      var nb = built(t, 0.05, 0.35, 4);
+      ctx.strokeStyle = 'rgba(192,192,192,0.85)'; ctx.lineWidth = 1;
+      var corners = [[m, m, 1, 1], [vw - m, m, -1, 1], [m, vh - m, 1, -1], [vw - m, vh - m, -1, -1]];
+      for (var i = 0; i < nb; i++) {
+        var cx2 = corners[i][0], cy2 = corners[i][1], sx = corners[i][2], sy = corners[i][3];
+        ctx.beginPath();
+        ctx.moveTo(cx2 + L * sx, cy2); ctx.lineTo(cx2, cy2); ctx.lineTo(cx2, cy2 + L * sy);
+        ctx.stroke();
       }
 
-      // tunnel rings, once the throat is open: they sweep outward past the
-      // edges, which is what reads as falling in
-      if (t > 0.32) {
-        var tt = (t - 0.32) / 0.68;
-        var zoom = 1 + tt * tt * 5.5;
-        for (var ring = 0; ring < 9; ring++) {
-          var z = ((ring / 9) + tt * 1.7) % 1;      // depth cycles toward the eye
-          var rr2 = R0 * (0.3 + z * 2.4) * zoom * 0.5;
-          if (rr2 > Math.hypot(vw, vh) * 0.75) continue;
-          var m = 10 + ((rr2 / 26) | 0) * 4;
-          var rot = tt * 3 * (ring % 2 ? 1 : -1) + ring;
-          var depthA = Math.max(0, 0.75 - z * 0.65) * Math.min(1, tt * 3);
-          var ch = RAMP[Math.max(3, Math.round((1 - z) * (RAMP.length - 1)))];
-          for (var q = 0; q < m; q++) {
-            var ang = (q / m) * Math.PI * 2 + rot;
-            var x2 = CX + Math.cos(ang) * rr2, y2 = CY + Math.sin(ang) * rr2 * 0.86;
-            // restraint: one or two chars per ring catch the diffraction
-            if (q === (ring * 3) % m && z < 0.4) {
-              ctx.fillStyle = holoCss(x2 / vw, y2 / vh, now / 1000, depthA);
-            } else {
-              ctx.fillStyle = 'rgba(192,192,192,' + depthA + ')';
-            }
-            ctx.fillText(ch, x2, y2);
-          }
+      // grid flicker: the field blinks in for single frames while arming
+      if (t > 0.4 && t < 1.1 && ((t * 30) | 0) % 7 === 0) {
+        ctx.strokeStyle = 'rgba(192,192,192,0.12)';
+        for (var gx = 0; gx < vw; gx += 44) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, vh); ctx.stroke(); }
+        for (var gy = 0; gy < vh; gy += 44) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(vw, gy); ctx.stroke(); }
+      }
+
+      // the boot log, typing on in hard lines
+      ctx.font = '10px ' + MONO; ctx.textAlign = 'left';
+      for (var li = 0; li < LOG.length; li++) {
+        if (t < LOG[li][0] + 0.05) break;
+        ctx.fillStyle = 'rgba(192,192,192,' + (li >= LOG.length - 3 ? 0.95 : 0.45) + ')';
+        ctx.fillText(LOG[li][0].toFixed(2) + '  ' + LOG[li][1], m + 4, m + 48 + li * 15);
+      }
+
+      // the number, typed on as a readout, struck through once it's bound
+      if (text && t >= 0.2) {
+        var nch = built(t, 0.2, 0.7, text.length);
+        ctx.font = '11px ' + MONO; ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(192,192,192,0.9)';
+        ctx.fillText(text.slice(0, nch), vw - m - 4, m + 48);
+        if (t > 1.1) {
+          var tw = ctx.measureText(text).width;
+          ctx.fillStyle = 'rgba(192,192,192,0.5)';
+          ctx.fillRect(vw - m - 4 - tw, m + 44, tw, 1);
         }
       }
 
-      // your digits spiral in ahead of you
-      ctx.font = '12px ' + MONO;
-      for (var d2 = 0; d2 < digits.length; d2++) {
-        var dg = digits[d2];
-        var pd = Math.min(1, Math.max(0, (now - t0 - dg.delay) / 1100));
-        if (pd >= 1) continue;
-        var ez = 1 - Math.pow(1 - pd, 2.2);
-        var curl = Math.sin(pd * Math.PI) * 60 * (d2 % 2 ? 1 : -1);
-        var xx = dg.x + (CX - dg.x) * ez + Math.cos(pd * 6 + d2) * curl * (1 - ez);
-        var yy = dg.y + (CY - dg.y) * ez + Math.sin(pd * 6 + d2) * curl * 0.5 * (1 - ez);
-        var kk = Math.round((1 - ez) * (RAMP.length - 1));
-        ctx.fillStyle = 'rgba(255,255,255,' + (1 - ez * 0.7) + ')';
-        ctx.fillText(pd < 0.25 ? dg.ch : RAMP[Math.max(1, kk)], xx, yy);
+      // hex iris: assembles side by side, then dilates in counted steps
+      if (t >= 0.7) {
+        var sides = built(t, 0.7, 1.1, 6);
+        ctx.strokeStyle = 'rgba(192,192,192,0.9)'; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (var s = 0; s < sides; s++) {
+          var a0 = -Math.PI / 2 + s / 6 * Math.PI * 2, a1 = a0 + Math.PI * 2 / 6;
+          ctx.moveTo(CX + Math.cos(a0) * R0, CY + Math.sin(a0) * R0);
+          ctx.lineTo(CX + Math.cos(a1) * R0, CY + Math.sin(a1) * R0);
+        }
+        ctx.stroke();
+        var steps = built(t, 1.3, 2.3, 4);
+        for (var k = 1; k <= steps; k++) {
+          ctx.strokeStyle = 'rgba(192,192,192,' + (0.7 - k * 0.12) + ')';
+          hexPath(R0 * (1 - k * 0.18), -Math.PI / 2 + k * 0.1);
+          ctx.stroke();
+        }
+        if (steps >= 2) {                          // the void shows through
+          ctx.fillStyle = '#161616';
+          hexPath(R0 * (1 - steps * 0.18), -Math.PI / 2 + steps * 0.1);
+          ctx.fill();
+        }
+        if (steps >= 1 && steps < 4) {             // one holo seam — the only color
+          var ha = -Math.PI / 2 + steps * 0.1;
+          var hr = R0 * (1 - steps * 0.18);
+          ctx.strokeStyle = holoCss(0.5 + 0.5 * Math.sin(t * 3), 0.5, t, 0.8);
+          ctx.beginPath();
+          ctx.moveTo(CX + Math.cos(ha) * hr, CY + Math.sin(ha) * hr);
+          ctx.lineTo(CX + Math.cos(ha + 1.047) * hr, CY + Math.sin(ha + 1.047) * hr);
+          ctx.stroke();
+        }
       }
 
-      ctx.restore();
+      // commit: two frames of inversion, Eva's alarm cut
+      var fk = snapT(t - 2.5, 24);
+      if (t >= 2.5 && fk < 3 / 24 && (fk * 24 | 0) % 2 === 0) {
+        ctx.fillStyle = '#c0c0c0'; ctx.fillRect(0, 0, vw, vh);
+        ctx.fillStyle = '#232323';
+        ctx.beginPath(); ctx.arc(CX, CY, R0 * 0.8, 0, 7); ctx.fill();
+      }
+
+      // swallow: the throat expands past the frame in hard steps
+      if (t >= 2.62) {
+        var sk = built(t, 2.62, 3.2, 7);
+        ctx.fillStyle = '#161616';
+        ctx.beginPath();
+        ctx.arc(CX, CY, R0 * 0.8 + (sk / 7) * Math.hypot(vw, vh) * 0.8, 0, 7);
+        ctx.fill();
+      }
+
+      // scanline texture over everything
+      ctx.fillStyle = 'rgba(0,0,0,0.14)';
+      for (var sy2 = 0; sy2 < vh; sy2 += 3) ctx.fillRect(0, sy2, vw, 1);
+
       requestAnimationFrame(frame);
     }
 
