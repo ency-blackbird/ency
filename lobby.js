@@ -245,7 +245,7 @@
     // ---- dom: one small window, centered — the blurred mesh plays behind it
     var panel = document.createElement('div');
     panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;' +
-      'width:min(340px, 82vw);aspect-ratio:12/7;border-radius:16px;overflow:hidden;' +
+      'width:min(400px, 86vw);aspect-ratio:12/7;border-radius:16px;overflow:hidden;' +
       'border:1px solid rgba(255,255,255,0.13);background:#1c1c1c;' +
       'box-shadow:inset 0 1px 0 rgba(255,255,255,0.1), 0 26px 64px rgba(0,0,0,0.5);' +
       'opacity:0;transition:opacity 700ms ease;' +
@@ -266,14 +266,6 @@
       'padding:5px 7px 4px;box-shadow:1px 1px 0 rgba(0,0,0,0.45);pointer-events:none;';
     plate.textContent = '— aboard';
     panel.appendChild(plate);
-
-    var hint = document.createElement('div');
-    hint.style.cssText = 'position:absolute;right:8px;bottom:7px;' +
-      'font:9px/1 ' + MONO + ';letter-spacing:0.14em;color:#6a6a6a;' +
-      'transition:opacity 800ms ease;pointer-events:none;';
-    hint.textContent = 'tap to move';
-    panel.appendChild(hint);
-    setTimeout(function () { hint.style.opacity = '0'; }, 7000);
 
     function clampFloor(p) {
       p.x = Math.max(1.2, Math.min(W - 1.2, p.x));
@@ -409,12 +401,15 @@
       ctx.fillRect(0, 0, iw, 3); ctx.fillRect(0, ih - 3, iw, 3);
       ctx.fillRect(0, 0, 3, ih); ctx.fillRect(iw - 3, 0, 3, ih);
 
-      // console strip along the top wall — the room's one landmark
+      // console strip along the top wall — the room's one landmark. Each
+      // unit's dot beeps in the mesh's diffraction colors, one phase apart.
       for (var u = 0; u < 4; u++) {
         var bx = 21 + u * 56;      // 4 units, 30px each, centered across 240
         ctx.fillStyle = '#3a3a3a'; ctx.fillRect(bx, 10, 30, 19);
         ctx.fillStyle = '#2a2a2a'; ctx.fillRect(bx + 4, 13, 22, 7);
-        ctx.fillStyle = ((simT * 2 + u) | 0) % 3 ? '#6a6a6a' : '#303030';
+        ctx.fillStyle = ((simT * 2 + u) | 0) % 3
+          ? holoCss(u / 4, 0.2, simT * 0.8 + u * 2.1, 0.95)
+          : '#303030';
         ctx.fillRect(bx + 4, 23, 3, 3);
       }
 
