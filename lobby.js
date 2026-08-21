@@ -368,6 +368,7 @@
         pause: rand(0.5, 3), speed: rand(1.1, 1.9),
         moving: false, face: 1,
         busy: 0, hugWith: null, gun: false, hop: 0, noticeCd: 0,
+        dance: 0, jamT: rand(3, 12),
       };
     }
 
@@ -630,6 +631,11 @@
         var c = chars[i];
         if (c.hop > 0) c.hop -= dt;
         if (c.noticeCd > 0) c.noticeCd -= dt;
+        if (c.jamT > 0) c.jamT -= dt;
+        if (c.dance > 0) {
+          c.dance -= dt;
+          c.face = ((simT * 6) | 0) % 2 ? 1 : -1;   // flips to the beat
+        }
         if (c.busy > 0) {
           c.busy -= dt; c.moving = false;
           if (c.busy <= 0) c.hugWith = null;
@@ -638,7 +644,13 @@
         if (c.pause > 0) {
           c.pause -= dt; c.moving = false;
           // idle strangers notice you when you're close
-          if (Math.hypot(you.x - c.x, you.y - c.y) < 2.2) c.face = you.x >= c.x ? 1 : -1;
+          if (c.dance <= 0 && Math.hypot(you.x - c.x, you.y - c.y) < 2.2) c.face = you.x >= c.x ? 1 : -1;
+          // and now and then one jumps, or hits a little dance
+          if (!reduced && c.jamT <= 0 && c.pause > 1.2) {
+            if (Math.random() < 0.5) c.hop = 0.5;
+            else c.dance = 1.1;
+            c.jamT = rand(8, 18);
+          }
           continue;
         }
         // a stranger walking past stops for a beat when you come close,
@@ -770,6 +782,7 @@
           lean = Math.round(Math.sin(hp * Math.PI) * 2) * (c.hugWith.x >= c.x ? 1 : -1);
         }
         var x = Math.round(c.x * S) + lean, y = Math.round(c.y * S);
+        if (c.dance > 0) x += Math.round(Math.sin(simT * 12) * 1.5);   // the shuffle
         var f = c.moving && !reduced ? ((simT * 7 + c.x * 3) | 0) % 2 : 0;
         ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x - 1, y, 3, 1);
         // a confetti blast makes the neighbors jump — the shadow stays put
