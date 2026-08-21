@@ -332,6 +332,24 @@
     plate.textContent = '— aboard';
     panel.appendChild(plate);
 
+    // the records spin on a crisp overlay so their circles stay smooth while
+    // the room underneath keeps its hard pixels
+    var fx = document.createElement('canvas');
+    fx.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+    panel.insertBefore(fx, plate);
+    var fctx = fx.getContext('2d');
+    var fscale = 1;
+    function sizeFx() {
+      var fr = panel.getBoundingClientRect();
+      if (!fr.width) { requestAnimationFrame(sizeFx); return; }
+      var dpr = Math.min(devicePixelRatio || 1, 2);
+      fx.width = fr.width * dpr; fx.height = fr.height * dpr;
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fscale = fr.width / (W * S);       // world-pixel → css-pixel
+    }
+    sizeFx();
+    addEventListener('resize', sizeFx);
+
     // the action nudge — crisp DOM text floated over the map, never canvas
     var tipEl = document.createElement('div');
     tipEl.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;' +
@@ -368,6 +386,8 @@
     var gunHintT = 0;                  // "c fire" nudge, shown briefly after a pickup
     var npcHugT = rand(6, 12);         // strangers hug each other too, now and then
     var HEART = [[1,0],[3,0],[0,1],[1,1],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[2,3]];
+
+    var floorGuns = [];                // muskets dropped with Z, lying where they fell
 
     // muskets hang on the side-room walls; C (or a tap) takes one down
     var RACKS = [
@@ -408,9 +428,24 @@
       hearts.push({ x: (you.x + c.x) / 2, y: Math.min(you.y, c.y) - 1.1, t: 0 });
     }
 
+    function tryDrop() {
+      if (!you.gun || you.busy > 0) return;
+      you.gun = false; gunHintT = 0;
+      var gx = you.x + you.face * 0.5, gy = you.y + 0.15;
+      if (!walkable(gx, gy)) { gx = you.x; gy = you.y; }
+      floorGuns.push({ x: gx, y: gy });
+    }
+
     function tryGun() {
       if (you.busy > 0) return;
       if (!you.gun) {
+        for (var g3 = 0; g3 < floorGuns.length; g3++) {         // off the floor first
+          var fg = floorGuns[g3];
+          if (Math.hypot(fg.x - you.x, fg.y - you.y) < 1.4) {
+            floorGuns.splice(g3, 1); you.gun = true; gunHintT = 5;
+            return;
+          }
+        }
         for (var i = 0; i < RACKS.length; i++) {
           var r = RACKS[i];
           if (!r.taken && Math.hypot(r.x - you.x, r.y - you.y) < 1.8) {
@@ -475,6 +510,7 @@
         keys[k] = true; e.preventDefault();
       } else if (k === 'x') { tryHug(); e.preventDefault(); }
       else if (k === 'c') { tryGun(); e.preventDefault(); }
+      else if (k === 'z') { tryDrop(); e.preventDefault(); }
     }
     function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
     addEventListener('keydown', onKeyDown);
@@ -692,29 +728,24 @@
         if (gx === W - 1 || !FLOOR[gy * W + gx + 1]) ctx.fillRect(X + S, Y, 2, S);
       }
 
-      // three decks against the hall's top wall, a record spinning in each,
-      // and a dot beeping in the mesh's diffraction colors, one phase apart
+      // three decks against the hall's top wall — the boxes and their beeping
+      // dots stay pixel; the records themselves spin on the crisp overlay
       for (var u = 0; u < 3; u++) {
         var bx = 57 + u * 48;
         ctx.fillStyle = '#3a3a3a'; ctx.fillRect(bx, 9, 30, 19);
-        var rcx = bx + 16, rcy = 18.5;
-        ctx.fillStyle = '#141414';
-        ctx.beginPath(); ctx.arc(rcx, rcy, 6.5, 0, 7); ctx.fill();       // the vinyl
-        ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(rcx, rcy, 4.5, 0, 7); ctx.stroke();     // a groove
-        ctx.fillStyle = '#6a6a6a'; ctx.fillRect(rcx - 1, 17.5, 2, 2);    // the label
-        // the glint rides the groove at subpixel positions with a short
-        // trail, so the spin reads smooth instead of stepping tile to tile
-        var ra = reduced ? u * 2 : simT * (1.2 + u * 0.35) + u * 2;
-        for (var g2 = 0; g2 < 3; g2++) {
-          var aa = ra - g2 * 0.22;
-          ctx.fillStyle = 'rgba(170,170,170,' + (0.9 - g2 * 0.3) + ')';
-          ctx.fillRect(rcx + Math.cos(aa) * 4.5 - 0.5, rcy + Math.sin(aa) * 4.5 - 0.5, 1, 1);
-        }
         ctx.fillStyle = ((simT * 2 + u) | 0) % 3
           ? holoCss(u / 3, 0.2, simT * 0.8 + u * 2.1, 0.95)
           : '#303030';
         ctx.fillRect(bx + 3, 22, 3, 3);
+      }
+
+      // muskets dropped on the floor, waiting to be picked back up
+      for (var fg2 = 0; fg2 < floorGuns.length; fg2++) {
+        var fgd = floorGuns[fg2];
+        var fgx = Math.round(fgd.x * S) - 5, fgy = Math.round(fgd.y * S);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(fgx, fgy + 1, 10, 1);
+        ctx.fillStyle = '#9a9a9a'; ctx.fillRect(fgx, fgy, 10, 1);
+        ctx.fillStyle = '#565656'; ctx.fillRect(fgx + 7, fgy - 1, 3, 1);
       }
 
       // muskets on the side-room walls, waiting on their pegs
@@ -770,15 +801,18 @@
       var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
       if (ns) tip = { x: ns.x, y: ns.y - 1.1, s: (touch ? 'tap' : 'x') + ' · hug' };
       else if (!you.gun) {
-        for (var ti = 0; ti < RACKS.length; ti++) {
+        for (var tg = 0; tg < floorGuns.length && !tip; tg++) {
+          var tfg = floorGuns[tg];
+          if (Math.hypot(tfg.x - you.x, tfg.y - you.y) < 1.4)
+            tip = { x: tfg.x, y: tfg.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
+        }
+        for (var ti = 0; ti < RACKS.length && !tip; ti++) {
           var tr = RACKS[ti];
-          if (!tr.taken && Math.hypot(tr.x - you.x, tr.y - you.y) < 1.8) {
+          if (!tr.taken && Math.hypot(tr.x - you.x, tr.y - you.y) < 1.8)
             tip = { x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
-            break;
-          }
         }
       } else if (gunHintT > 0) {
-        tip = { x: you.x, y: you.y - 1.2, s: (touch ? 'tap' : 'c') + ' · fire' };
+        tip = { x: you.x, y: you.y - 1.2, s: touch ? 'tap · fire' : 'c · fire  z · drop' };
       }
       if (tip) {
         tipHold = 1;
@@ -828,11 +862,34 @@
       }
     }
 
+    // the crisp layer: three records, anti-aliased, with the glint trail
+    function drawRecords() {
+      fctx.clearRect(0, 0, fx.width, fx.height);
+      for (var u = 0; u < 3; u++) {
+        var cx = (57 + u * 48 + 16) * fscale, cy = 18.5 * fscale;
+        fctx.fillStyle = '#141414';
+        fctx.beginPath(); fctx.arc(cx, cy, 6.5 * fscale, 0, 7); fctx.fill();      // the vinyl
+        fctx.strokeStyle = '#2e2e2e'; fctx.lineWidth = Math.max(1, fscale * 0.8);
+        fctx.beginPath(); fctx.arc(cx, cy, 4.5 * fscale, 0, 7); fctx.stroke();    // a groove
+        fctx.fillStyle = '#6a6a6a';
+        fctx.beginPath(); fctx.arc(cx, cy, 1.1 * fscale, 0, 7); fctx.fill();      // the label
+        var ra = reduced ? u * 2 : simT * (1.2 + u * 0.35) + u * 2;
+        for (var g2 = 0; g2 < 4; g2++) {
+          var aa = ra - g2 * 0.16;
+          fctx.fillStyle = 'rgba(175,175,175,' + (0.85 - g2 * 0.2) + ')';
+          fctx.beginPath();
+          fctx.arc(cx + Math.cos(aa) * 4.5 * fscale, cy + Math.sin(aa) * 4.5 * fscale, 0.55 * fscale, 0, 7);
+          fctx.fill();
+        }
+      }
+    }
+
     function frame(now) {
       if (!alive) return;
       var dt = Math.min(0.05, (now - last) / 1000); last = now;
       step(dt);
       draw();
+      drawRecords();
       var sec = (Date.now() / 1000) | 0;
       if (sec !== lastSec) { lastSec = sec; tickTimer(); }
       raf = requestAnimationFrame(frame);
@@ -851,6 +908,7 @@
         if (es) es.close();
         removeEventListener('keydown', onKeyDown);
         removeEventListener('keyup', onKeyUp);
+        removeEventListener('resize', sizeFx);
         wrap.remove();
       },
     };
