@@ -1,13 +1,17 @@
 // ency — zero-dependency server.
 //
-//   /            public page: the mesh, on whatever preset the studio published
+//   /            public page: the mesh + the gate; joined visitors land in the lobby
 //   /studio      the same mesh plus its dials; needs a session cookie
-//   /api/*       preset read/write, email capture, unlock
+//   /api/*       preset read/write, gate/join, lobby stream, unlock
 //
-// State lives in two files under DATA_DIR (a Railway volume in production):
-// emails.jsonl is append-only, preset.json is the published mesh settings.
-// That's deliberately the smallest thing that works — see README for when to
-// outgrow it.
+// State lives in files under DATA_DIR (a Railway volume in production):
+// emails.jsonl and phones.jsonl are append-only, preset.json is the published
+// mesh settings. That's deliberately the smallest thing that works — see
+// README for when to outgrow it.
+//
+// Phone numbers are collected now, texted later: no SMS provider is wired in
+// yet, so nothing here sends anything. The lobby stream only ever fans out a
+// COUNT — the numbers themselves never leave /api/phones (studio-authed).
 
 import http from 'node:http';
 import { readFile, appendFile, writeFile, mkdir } from 'node:fs/promises';
@@ -20,10 +24,14 @@ const PORT = process.env.PORT || 4720;
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const EMAILS = path.join(DATA_DIR, 'emails.jsonl');
+const PHONES = path.join(DATA_DIR, 'phones.jsonl');
 const PRESET = path.join(DATA_DIR, 'preset.json');
 const HISTORY = path.join(DATA_DIR, 'preset-history.jsonl');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+// the fan gate, not the studio one — defaults on so the flow works out of the
+// box; set the env var to rotate it without a deploy
+const GATE_PASSWORD = process.env.GATE_PASSWORD || 'sarang';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const SESSION_TTL = 7 * 24 * 3600 * 1000;
 
@@ -32,7 +40,8 @@ if (!process.env.SESSION_SECRET) console.warn('⚠ SESSION_SECRET unset — sess
 
 // ------------------------------------------------------------------ storage
 
-const seen = new Set();   // lowercased emails, for dedupe without re-reading
+const seen = new Set();        // lowercased emails, for dedupe without re-reading
+const phoneSeen = new Set();   // normalized E.164 numbers, same idea
 
 async function initStore() {
   await mkdir(DATA_DIR, { recursive: true });
@@ -42,7 +51,13 @@ async function initStore() {
       try { seen.add(JSON.parse(line).email); } catch { /* skip a torn line */ }
     }
   } catch { /* first run */ }
-  console.log(`◈ ${seen.size} subscriber(s) loaded from ${DATA_DIR}`);
+  try {
+    for (const line of readFileSync(PHONES, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try { phoneSeen.add(JSON.parse(line).phone); } catch { /* skip a torn line */ }
+    }
+  } catch { /* first run */ }
+  console.log(`◈ ${seen.size} subscriber(s), ${phoneSeen.size} number(s) loaded from ${DATA_DIR}`);
 }
 
 async function readPreset() {
@@ -72,14 +87,17 @@ function validSession(token) {
   return Number(exp) > Date.now();
 }
 
-function passwordOk(supplied) {
-  if (!ADMIN_PASSWORD || typeof supplied !== 'string') return false;
+function secretOk(supplied, against) {
+  if (!against || typeof supplied !== 'string') return false;
   // hash both sides first: equal-length inputs, so timingSafeEqual can't throw
   // and length itself doesn't leak
   const a = crypto.createHash('sha256').update(supplied).digest();
-  const b = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest();
+  const b = crypto.createHash('sha256').update(against).digest();
   return crypto.timingSafeEqual(a, b);
 }
+
+const passwordOk = supplied => secretOk(supplied, ADMIN_PASSWORD);
+const gateOk = supplied => secretOk(supplied, GATE_PASSWORD);
 
 function cookies(req) {
   const out = {};
@@ -170,6 +188,32 @@ async function serveFile(res, name) {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+// E.164-ish: strip formatting, 7–15 digits; a bare US 10-digit gets +1
+function normalizePhone(raw) {
+  if (typeof raw !== 'string' || raw.length > 32) return null;
+  let s = raw.replace(/[\s().\-]/g, '');
+  if (/^\d{10}$/.test(s)) s = '+1' + s;
+  else if (/^\d{11,15}$/.test(s)) s = '+' + s;
+  if (!/^\+\d{7,15}$/.test(s)) return null;
+  return s;
+}
+
+// ------------------------------------------------------------------ lobby stream
+//
+// One SSE channel that fans out the signup count — only ever the count, so it
+// can stay public without exposing a single number. In-memory like the rate
+// limiter: a redeploy drops connections and EventSource reconnects on its own.
+
+const lobbyClients = new Set();
+
+function lobbyBroadcast() {
+  const msg = `data: ${JSON.stringify({ count: phoneSeen.size })}\n\n`;
+  for (const c of lobbyClients) c.write(msg);
+}
+
+// comment-only heartbeat so proxies don't reap quiet connections
+setInterval(() => { for (const c of lobbyClients) c.write(': hb\n\n'); }, 25_000).unref();
+
 // ------------------------------------------------------------------ routes
 
 const server = http.createServer(async (req, res) => {
@@ -203,6 +247,46 @@ const server = http.createServer(async (req, res) => {
       // never logged, only written
       await appendFile(EMAILS, JSON.stringify({ email, ts: new Date().toISOString() }) + '\n');
       return json(res, 200, { ok: true });
+    }
+
+    // gate check on its own, so the field can flip to the phone step only
+    // after the word is right — /api/join re-checks it regardless
+    if (p === '/api/gate' && req.method === 'POST') {
+      if (!rateLimit(ip, 'gate', 15, 10 * 60_000)) return json(res, 429, { error: 'too many attempts' });
+      let password;
+      try { password = JSON.parse(await readBody(req)).password; } catch { return json(res, 400, { error: 'bad request' }); }
+      if (!gateOk(password)) return json(res, 401, { error: 'no' });
+      return json(res, 200, { ok: true });
+    }
+
+    if (p === '/api/join' && req.method === 'POST') {
+      if (!rateLimit(ip, 'join', 6, 60_000)) return json(res, 429, { error: 'slow down' });
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { return json(res, 400, { error: 'bad request' }); }
+      if (!gateOk(body.password)) return json(res, 401, { error: 'no' });
+      const phone = normalizePhone(body.phone);
+      if (!phone) return json(res, 400, { error: "that doesn't look like a phone number" });
+      if (phoneSeen.has(phone)) return json(res, 200, { ok: true, already: true, count: phoneSeen.size });
+      phoneSeen.add(phone);
+      // never logged, only written
+      await appendFile(PHONES, JSON.stringify({ phone, ts: new Date().toISOString() }) + '\n');
+      lobbyBroadcast();
+      return json(res, 200, { ok: true, count: phoneSeen.size });
+    }
+
+    if (p === '/api/lobby/stream' && req.method === 'GET') {
+      if (lobbyClients.size >= 200) return json(res, 503, { error: 'lobby full' });
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      res.write('retry: 3000\n\n');
+      res.write(`data: ${JSON.stringify({ count: phoneSeen.size })}\n\n`);
+      lobbyClients.add(res);
+      req.on('close', () => lobbyClients.delete(res));
+      return;
     }
 
     if (p === '/api/unlock' && req.method === 'POST') {
@@ -246,6 +330,16 @@ const server = http.createServer(async (req, res) => {
           .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
       } catch { /* none yet */ }
       return json(res, 200, { count: rows.length, subscribers: rows });
+    }
+
+    if (p === '/api/phones' && req.method === 'GET') {
+      if (!authed(req)) return json(res, 401, { error: 'unauthorized' });
+      let rows = [];
+      try {
+        rows = (await readFile(PHONES, 'utf8')).split('\n').filter(Boolean)
+          .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      } catch { /* none yet */ }
+      return json(res, 200, { count: rows.length, phones: rows });
     }
 
     if (p === '/api/logout' && req.method === 'POST') {
