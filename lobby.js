@@ -303,11 +303,18 @@
       'touch-action:none;user-select:none;-webkit-user-select:none;';
     wrap.appendChild(panel);
 
-    // months, days, then the seconds ticking down to november 13 — the colon
-    // blinks once a second. Crisp DOM text in the site's own mono, not canvas.
+    // months and days, the ticking clock stacked beneath — the colon blinks
+    // once a second. Crisp DOM text in the site's own mono, not canvas.
     var timer = document.createElement('div');
-    timer.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#6f6f6f;' +
-      'font-variant-numeric:tabular-nums;user-select:none;';
+    timer.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;user-select:none;';
+    var timerDate = document.createElement('div');
+    timerDate.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#6f6f6f;' +
+      'font-variant-numeric:tabular-nums;';
+    var timerClock = document.createElement('div');
+    timerClock.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#4e4e4e;' +
+      'font-variant-numeric:tabular-nums;';
+    timer.appendChild(timerDate);
+    timer.appendChild(timerClock);
     wrap.appendChild(timer);
 
     var cv = document.createElement('canvas');
@@ -538,7 +545,8 @@
       rem -= days * 86400000;
       var hh = (rem / 3600000) | 0, mm = ((rem / 60000) | 0) % 60, ss = ((rem / 1000) | 0) % 60;
       var c = now.getSeconds() % 2 ? ' ' : ':';       // the blink
-      timer.textContent = months + ' mo ' + days + ' d ' + two(hh) + c + two(mm) + c + two(ss);
+      timerDate.textContent = months + ' mo ' + days + ' d';
+      timerClock.textContent = two(hh) + c + two(mm) + c + two(ss);
     }
 
     // walk toward the current waypoint (or the target), sliding along walls;
