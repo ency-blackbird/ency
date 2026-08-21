@@ -3,9 +3,9 @@
 Artist project site. The page is the mesh: a parametric Möbius ribbon rasterized
 live into a character grid, which resolves into the arc mark. Below it, a gate:
 say the word (`sarang` unless rotated), leave your number, and you're beamed
-through a wormhole into the lobby — a small pixel minimap in the corner where
-every number that has ever joined wanders as a tiny body, live. A lock opens
-the studio.
+through a wormhole into the lobby — a small pixel minimap, centered, with the
+mesh still playing behind it, blurred and darker. Every number that has ever
+joined wanders in there as a tiny body, live. A lock opens the studio.
 
 No build step, no dependencies. `npm start` and open the port.
 

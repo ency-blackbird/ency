@@ -9,8 +9,8 @@
  *                                 first — then the whole tunnel collapses
  *                                 into the little lobby panel.
  *
- *   createLobby(opts)             a small HUD-minimap panel in the corner of
- *                                 the mesh page — not a takeover. Grayscale,
+ *   createLobby(opts)             a small HUD-minimap window, centered, with
+ *                                 the mesh playing on behind it. Grayscale,
  *                                 one tiny pixel body per phone number; yours
  *                                 is the white one with the heading wedge.
  *                                 New numbers pop in live off
@@ -242,12 +242,13 @@
     var PAD = { x: W * 0.5, y: H * 0.62 };
     var RENDER_CAP = 150;             // bodies drawn; the counter is always true
 
-    // ---- dom: one glass panel, same materials as the site's field/modal
+    // ---- dom: one small window, centered — the blurred mesh plays behind it
     var panel = document.createElement('div');
-    panel.style.cssText = 'position:fixed;left:16px;bottom:max(16px, env(safe-area-inset-bottom, 0px));z-index:3;' +
-      'width:min(320px, 58vw);aspect-ratio:12/7;border-radius:14px;overflow:hidden;' +
-      'border:1px solid rgba(255,255,255,0.12);background:#1c1c1c;' +
-      'box-shadow:0 18px 44px rgba(0,0,0,0.45);opacity:0;transition:opacity 700ms ease;' +
+    panel.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;' +
+      'width:min(340px, 82vw);aspect-ratio:12/7;border-radius:16px;overflow:hidden;' +
+      'border:1px solid rgba(255,255,255,0.13);background:#1c1c1c;' +
+      'box-shadow:inset 0 1px 0 rgba(255,255,255,0.1), 0 26px 64px rgba(0,0,0,0.5);' +
+      'opacity:0;transition:opacity 700ms ease;' +
       'touch-action:none;user-select:none;-webkit-user-select:none;';
     document.body.appendChild(panel);
 

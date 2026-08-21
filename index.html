@@ -235,11 +235,14 @@
   const foot = document.getElementById('foot');
   let ribbon = null, lobby = null;
 
-  // The lobby is a small panel in the corner — the mesh stays the page.
-  function bootLobby() {
+  // The lobby is a small centered window; the mesh keeps playing behind it,
+  // pushed back — a little blurred, a little darker.
+  function bootLobby(animate) {
     if (lobby) return lobby;
     if (foot.parentNode) foot.remove();
+    cv.style.transition = animate ? 'opacity 1200ms ease, filter 1200ms ease' : 'none';
     cv.style.opacity = '1';                          // undo the beam's dimming
+    cv.style.filter = 'blur(4px) brightness(0.55)';
     // starts as just you; the stream corrects the count on connect
     lobby = createLobby({ count: 1, reduced });
     return lobby;
@@ -330,7 +333,7 @@
     foot.style.opacity = '0';
     cv.style.transition = 'opacity 1200ms ease';
     cv.style.opacity = '0.35';
-    createWormhole({ text: phone, fromRect, reduced }, () => bootLobby().panel);
+    createWormhole({ text: phone, fromRect, reduced }, () => bootLobby(true).panel);
   }
 
   form.addEventListener('submit', async e => {
