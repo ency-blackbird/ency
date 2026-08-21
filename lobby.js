@@ -320,7 +320,7 @@
         shade: SHADES[(Math.random() * SHADES.length) | 0],
         pause: rand(0.5, 3), speed: rand(1.1, 1.9),
         moving: false, face: 1,
-        busy: 0, hugWith: null, gun: false,
+        busy: 0, hugWith: null, gun: false, hop: 0,
       };
     }
 
@@ -335,6 +335,9 @@
     var hearts = [], confetti = [];
     var hugCd = 0, flash = 0;
     var HUG_T = 1.2;
+    var touch = matchMedia('(pointer: coarse)').matches;
+    var gunHintT = 0;                  // "c fire" nudge, shown briefly after a pickup
+    var npcHugT = rand(6, 12);         // strangers hug each other too, now and then
     var HEART = [[1,0],[3,0],[0,1],[1,1],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[2,3]];
 
     // muskets hang on the side-room walls; C (or a tap) takes one down
@@ -382,12 +385,13 @@
         for (var i = 0; i < RACKS.length; i++) {
           var r = RACKS[i];
           if (!r.taken && Math.hypot(r.x - you.x, r.y - you.y) < 1.8) {
-            r.taken = true; you.gun = true;
+            r.taken = true; you.gun = true; gunHintT = 5;
             return;
           }
         }
         return;             // nothing on the wall near you, nothing in hand
       }
+      gunHintT = 0;
       flash = 0.07;
       var dir = you.face;
       var mx = you.x + dir * 0.7, my = you.y - 0.45;
@@ -404,6 +408,14 @@
       }
       var bx2 = you.x - dir * 0.18;                // recoil
       if (canStand(bx2, you.y)) you.x = bx2;
+      // everyone nearby turns to look, and hops
+      for (var w = 1; w < chars.length; w++) {
+        var wc = chars[w];
+        if (Math.hypot(wc.x - you.x, wc.y - you.y) < 3.2) {
+          wc.face = you.x >= wc.x ? 1 : -1;
+          if (!reduced) wc.hop = 0.5;
+        }
+      }
     }
 
     function syncCount(n, celebrate) {
@@ -483,6 +495,20 @@
     var glintTimer = rand(8, 20);
     var simT = 0, last = performance.now(), raf = 0, alive = true;
 
+    // months-and-days until the 13th of november, whichever one is next
+    var cd = null, cdAt = -99;
+    function countdown() {
+      var now = new Date();
+      var target = new Date(now.getFullYear(), 10, 13);
+      if (target <= now) target = new Date(now.getFullYear() + 1, 10, 13);
+      var months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+      var probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate());
+      if (probe > target) { months--; probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate()); }
+      // round, not ceil: the DST hour in between must not add a day
+      var days = Math.round((target - probe) / 86400000);
+      return { m: months, d: days };
+    }
+
     // walk toward the current waypoint (or the target), sliding along walls;
     // returns false once fully arrived
     function stepMove(c, dt, speed) {
@@ -526,20 +552,55 @@
 
       for (var i = 1; i < chars.length; i++) {
         var c = chars[i];
+        if (c.hop > 0) c.hop -= dt;
         if (c.busy > 0) {
           c.busy -= dt; c.moving = false;
           if (c.busy <= 0) c.hugWith = null;
           continue;
         }
-        if (c.pause > 0) { c.pause -= dt; c.moving = false; continue; }
+        if (c.pause > 0) {
+          c.pause -= dt; c.moving = false;
+          // idle strangers notice you when you're close
+          if (Math.hypot(you.x - c.x, you.y - c.y) < 2.2) c.face = you.x >= c.x ? 1 : -1;
+          continue;
+        }
         if (!stepMove(c, dt, c.speed)) {
           c.pause = rand(1.5, 6);
-          var t = Math.random() < 0.25
-            ? anyTile(function (q) { return q.y < 4.5 && roomOf(q.x) === 0; })  // drift to the consoles
-            : anyTile();
+          var roll = Math.random(), t;
+          if (roll < 0.15) {                       // sometimes they come say hi
+            var gx2 = you.x + rand(-1.2, 1.2), gy2 = you.y + rand(-1, 1);
+            t = walkable(gx2, gy2) ? { x: gx2, y: gy2 } : anyTile();
+          } else if (roll < 0.4) {                 // or drift to the consoles
+            t = anyTile(function (q) { return q.y < 4.5 && roomOf(q.x) === 0; });
+          } else {
+            t = anyTile();
+          }
           routeTo(c, t.x, t.y);
         }
       }
+
+      // strangers hug each other too, when two idle near enough
+      npcHugT -= dt;
+      if (npcHugT <= 0) {
+        npcHugT = rand(9, 18);
+        outer: for (var a2 = 1; a2 < chars.length; a2++) {
+          var ca = chars[a2];
+          if (ca.busy > 0) continue;
+          for (var b2 = a2 + 1; b2 < chars.length; b2++) {
+            var cb = chars[b2];
+            if (cb.busy > 0) continue;
+            if (Math.hypot(ca.x - cb.x, ca.y - cb.y) < 1.5) {
+              ca.busy = cb.busy = HUG_T;
+              ca.face = cb.x > ca.x ? 1 : -1; cb.face = -ca.face;
+              ca.hugWith = cb; cb.hugWith = ca;
+              ca.pause = cb.pause = 2;
+              hearts.push({ x: (ca.x + cb.x) / 2, y: Math.min(ca.y, cb.y) - 1.1, t: 0 });
+              break outer;
+            }
+          }
+        }
+      }
+      if (gunHintT > 0) gunHintT -= dt;
 
       glintTimer -= dt;
       if (glintTimer <= 0) {
@@ -580,17 +641,34 @@
         if (gx === W - 1 || !FLOOR[gy * W + gx + 1]) ctx.fillRect(X + S, Y, 2, S);
       }
 
-      // three consoles against the hall's top wall. Each unit's dot beeps in
-      // the mesh's diffraction colors, one phase apart.
+      // three decks against the hall's top wall, a record spinning in each,
+      // and a dot beeping in the mesh's diffraction colors, one phase apart
       for (var u = 0; u < 3; u++) {
         var bx = 57 + u * 48;
         ctx.fillStyle = '#3a3a3a'; ctx.fillRect(bx, 9, 30, 19);
-        ctx.fillStyle = '#2a2a2a'; ctx.fillRect(bx + 4, 12, 22, 7);
+        var rcx = bx + 16, rcy = 18.5;
+        ctx.fillStyle = '#141414';
+        ctx.beginPath(); ctx.arc(rcx, rcy, 6.5, 0, 7); ctx.fill();       // the vinyl
+        ctx.strokeStyle = '#2e2e2e'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(rcx, rcy, 4.5, 0, 7); ctx.stroke();     // a groove
+        ctx.fillStyle = '#6a6a6a'; ctx.fillRect(rcx - 1, 17.5, 2, 2);    // the label
+        var ra = reduced ? u * 2 : simT * (1.7 + u * 0.5) + u * 2;
+        ctx.fillStyle = '#a0a0a0';                                       // the glint riding the groove
+        ctx.fillRect(Math.round(rcx + Math.cos(ra) * 4.5), Math.round(rcy + Math.sin(ra) * 4.5), 1, 1);
         ctx.fillStyle = ((simT * 2 + u) | 0) % 3
           ? holoCss(u / 3, 0.2, simT * 0.8 + u * 2.1, 0.95)
           : '#303030';
-        ctx.fillRect(bx + 4, 22, 3, 3);
+        ctx.fillRect(bx + 3, 22, 3, 3);
       }
+
+      // the countdown, painted on the floor where nothing else lives
+      if (simT - cdAt > 30 || !cd) { cd = countdown(); cdAt = simT; }
+      ctx.font = '8px ' + MONO; ctx.textAlign = 'center';
+      ctx.fillStyle = '#5a5a5a';
+      ctx.fillText(cd.m + ' mo ' + cd.d + ' d', 166, 114);
+      ctx.font = '6px ' + MONO;
+      ctx.fillStyle = '#3e3e3e';
+      ctx.fillText('nov 13', 166, 122);
 
       // the pad: the scar where the wormhole set you down
       ctx.strokeStyle = 'rgba(200,200,200,0.35)'; ctx.lineWidth = 1;
@@ -628,25 +706,48 @@
         var x = Math.round(c.x * S) + lean, y = Math.round(c.y * S);
         var f = c.moving && !reduced ? ((simT * 7 + c.x * 3) | 0) % 2 : 0;
         ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x - 1, y, 3, 1);
+        // a confetti blast makes the neighbors jump — the shadow stays put
+        var yb = y - (c.hop > 0 ? Math.round(Math.sin((1 - c.hop / 0.5) * Math.PI) * 2) : 0);
         ctx.fillStyle = c.you ? '#ffffff' : c.shade;
-        ctx.fillRect(x - 1, y - 4, 2, 3);                       // body
-        ctx.fillRect(x - 1, y - 6, 2, 2);                       // head
-        if (f) ctx.fillRect(x - 1 + (c.face > 0 ? 1 : -1), y - 1, 1, 1);  // step
+        ctx.fillRect(x - 1, yb - 4, 2, 3);                      // body
+        ctx.fillRect(x - 1, yb - 6, 2, 2);                      // head
+        if (f) ctx.fillRect(x - 1 + (c.face > 0 ? 1 : -1), yb - 1, 1, 1);  // step
         if (c.you) {
           if (c.gun) {                                          // the musket, carried
             ctx.fillStyle = '#9a9a9a';
-            ctx.fillRect(x + (c.face > 0 ? 1 : -6), y - 4, 6, 1);
+            ctx.fillRect(x + (c.face > 0 ? 1 : -6), yb - 4, 6, 1);
             ctx.fillStyle = '#565656';
-            ctx.fillRect(x + (c.face > 0 ? 1 : -2), y - 3, 2, 1);
+            ctx.fillRect(x + (c.face > 0 ? 1 : -2), yb - 3, 2, 1);
             ctx.fillStyle = '#ffffff';
           } else {
-            ctx.fillRect(x + (c.face > 0 ? 2 : -3), y - 4, 1, 1); // heading wedge
+            ctx.fillRect(x + (c.face > 0 ? 2 : -3), yb - 4, 1, 1); // heading wedge
           }
-          if (((simT * 2) | 0) % 2 === 0) ctx.fillRect(x - 1, y - 9, 2, 1);
+          if (((simT * 2) | 0) % 2 === 0) ctx.fillRect(x - 1, yb - 9, 2, 1);
           if (flash > 0 && c.gun) {                             // muzzle flash
-            ctx.fillRect(x + (c.face > 0 ? 7 : -9), y - 5, 2, 2);
+            ctx.fillRect(x + (c.face > 0 ? 7 : -9), yb - 5, 2, 2);
           }
         }
+      }
+
+      // a nudge when an action is in reach — one at a time, nearest first
+      var tip = null;
+      var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
+      if (ns) tip = { x: ns.x, y: ns.y - 1.5, s: (touch ? 'tap' : 'x') + ' · hug' };
+      else if (!you.gun) {
+        for (var ti = 0; ti < RACKS.length; ti++) {
+          var tr = RACKS[ti];
+          if (!tr.taken && Math.hypot(tr.x - you.x, tr.y - you.y) < 1.8) {
+            tip = { x: tr.x + tr.side * 0.8, y: tr.y - 1.1, s: (touch ? 'tap' : 'c') + ' · take' };
+            break;
+          }
+        }
+      } else if (gunHintT > 0) {
+        tip = { x: you.x, y: you.y - 1.6, s: (touch ? 'tap' : 'c') + ' · fire' };
+      }
+      if (tip) {
+        ctx.font = '6px ' + MONO; ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(200,200,200,0.8)';
+        ctx.fillText(tip.s, Math.round(tip.x * S), Math.round(tip.y * S));
       }
 
       // confetti — the only full-spectrum moment in the room
