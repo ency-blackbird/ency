@@ -562,7 +562,22 @@
           vx: dir * rand(0.8, 2.4), vy: rand(-0.25, 0.1),
           r: rand(0.25, 0.5), grow: rand(0.25, 0.5),
           t: 0, life: rand(2.4, 4.2),
+          seed: rand(0, 1000),      // grains hold their place as the puff grows
         });
+      }
+    }
+
+    // a 1px ring, plotted the old way (midpoint circle) — no anti-aliasing
+    function pixelRing(cx, cy, r, style) {
+      ctx.fillStyle = style;
+      var x = r, y = 0, err = 1 - r;
+      while (x >= y) {
+        ctx.fillRect(cx + x, cy + y, 1, 1); ctx.fillRect(cx - x, cy + y, 1, 1);
+        ctx.fillRect(cx + x, cy - y, 1, 1); ctx.fillRect(cx - x, cy - y, 1, 1);
+        ctx.fillRect(cx + y, cy + x, 1, 1); ctx.fillRect(cx - y, cy + x, 1, 1);
+        ctx.fillRect(cx + y, cy - x, 1, 1); ctx.fillRect(cx - y, cy - x, 1, 1);
+        y++;
+        if (err < 0) err += 2 * y + 1; else { x--; err += 2 * (y - x) + 1; }
       }
     }
 
@@ -962,6 +977,43 @@
           ctx.fillRect(hxp + HEART[hq][0], hyp + HEART[hq][1], 1, 1);
       }
 
+      // fog: a dithered pixel bank — stable grains that spread and thin
+      for (var f3 = 0; f3 < fogs.length; f3++) {
+        var fo = fogs[f3];
+        var fcx = fo.x * S, fcy = fo.y * S, frr = fo.r * S;
+        var env = Math.sin(Math.min(1, fo.t / fo.life) * Math.PI);
+        var nd = (28 * env) | 0;
+        for (var di = 0; di < nd; di++) {
+          var h1 = Math.sin(fo.seed + di * 12.9898) * 43758.5453; h1 -= Math.floor(h1);
+          var h2 = Math.sin(fo.seed + di * 78.233) * 43758.5453; h2 -= Math.floor(h2);
+          var fang = h1 * 6.283, frad = Math.sqrt(h2) * frr;
+          ctx.fillStyle = di % 3 === 0 ? '#5a5a5a' : di % 3 === 1 ? '#454545' : '#383838';
+          ctx.fillRect((fcx + Math.cos(fang) * frad) | 0, (fcy + Math.sin(fang) * frad * 0.7) | 0, 1, 1);
+        }
+      }
+
+      // bubbles: pixel rings, one film-glint pixel riding each — they pop
+      // into four sparks at the end
+      for (var b3 = 0; b3 < bubbles.length; b3++) {
+        var bb = bubbles[b3];
+        var bcx = Math.round(bb.x * S), bcy = Math.round(bb.y * S);
+        var br = Math.max(1, Math.round(bb.r * S));
+        if (bb.life - bb.t < 0.12) {                 // the pop
+          ctx.fillStyle = 'rgba(220,220,220,0.9)';
+          ctx.fillRect(bcx - br - 1, bcy, 1, 1); ctx.fillRect(bcx + br + 1, bcy, 1, 1);
+          ctx.fillRect(bcx, bcy - br - 1, 1, 1); ctx.fillRect(bcx, bcy + br + 1, 1, 1);
+          continue;
+        }
+        pixelRing(bcx, bcy, br, 'rgba(190,190,190,0.75)');
+        var ia = bb.ph + simT * 2;
+        ctx.fillStyle = holoCss(bb.ph / 6.28, 0.4, simT + bb.ph, 0.85);
+        ctx.fillRect(bcx + Math.round(Math.cos(ia) * br), bcy + Math.round(Math.sin(ia) * br), 1, 1);
+        if (br > 1) {                                // specular pixel
+          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.fillRect(bcx - (br >> 1), bcy - (br >> 1) - 1, 1, 1);
+        }
+      }
+
       // holo, where it's allowed: joins and the rare glint
       for (var r = 0; r < rings.length; r++) {
         var rg = rings[r];
@@ -1002,31 +1054,6 @@
         }
       }
 
-      // bubbles: soap film on the crisp layer — a gray ring, one iridescent
-      // arc sliding around it, and a specular dot
-      for (var b3 = 0; b3 < bubbles.length; b3++) {
-        var bb = bubbles[b3];
-        var bx3 = bb.x * S * fscale, by3 = bb.y * S * fscale, br = bb.r * S * fscale;
-        var fade = Math.min(1, (bb.life - bb.t) / 0.4) * 0.85;
-        fctx.strokeStyle = 'rgba(200,200,200,' + (0.55 * fade) + ')';
-        fctx.lineWidth = Math.max(1, fscale * 0.6);
-        fctx.beginPath(); fctx.arc(bx3, by3, br, 0, 7); fctx.stroke();
-        fctx.strokeStyle = holoCss(bb.ph / 6.28, 0.4, simT + bb.ph, 0.5 * fade);
-        fctx.beginPath(); fctx.arc(bx3, by3, br, bb.ph + simT * 1.5, bb.ph + simT * 1.5 + 1.2); fctx.stroke();
-        fctx.fillStyle = 'rgba(255,255,255,' + (0.7 * fade) + ')';
-        fctx.beginPath(); fctx.arc(bx3 - br * 0.35, by3 - br * 0.35, Math.max(0.6, br * 0.14), 0, 7); fctx.fill();
-      }
-
-      // fog: soft billows that thin as they spread
-      for (var f3 = 0; f3 < fogs.length; f3++) {
-        var fo = fogs[f3];
-        var fx3 = fo.x * S * fscale, fy3 = fo.y * S * fscale, frr = fo.r * S * fscale;
-        var env = Math.sin(Math.min(1, fo.t / fo.life) * Math.PI);
-        fctx.fillStyle = 'rgba(190,190,190,' + (0.10 * env) + ')';
-        fctx.beginPath(); fctx.arc(fx3, fy3, frr, 0, 7); fctx.fill();
-        fctx.fillStyle = 'rgba(150,150,150,' + (0.07 * env) + ')';
-        fctx.beginPath(); fctx.arc(fx3 + frr * 0.3, fy3 - frr * 0.2, frr * 0.7, 0, 7); fctx.fill();
-      }
     }
 
     function frame(now) {
