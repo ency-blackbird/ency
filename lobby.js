@@ -420,14 +420,16 @@
     var npcHugT = rand(6, 12);         // strangers hug each other too, now and then
     var HEART = [[1,0],[3,0],[0,1],[1,1],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[2,3]];
 
-    var floorGuns = [];                // muskets dropped with Z, lying where they fell
+    var floorGuns = [];                // guns dropped with Z, lying where they fell
+    var bubbles = [], fogs = [];       // what the new guns shoot
 
-    // muskets hang on the side-room walls; C (or a tap) takes one down
+    // the armory hangs on the side-room walls; C (or a tap) takes one down.
+    // one musket and one bubble gun on the left, musket and fog gun right.
     var RACKS = [
-      { x: 1.55,  y: 7.5, side: 1,  taken: false },
-      { x: 1.55,  y: 9.5, side: 1,  taken: false },
-      { x: 22.45, y: 5.5, side: -1, taken: false },
-      { x: 22.45, y: 7.5, side: -1, taken: false },
+      { x: 1.55,  y: 7.5, side: 1,  type: 'confetti', taken: false },
+      { x: 1.55,  y: 9.5, side: 1,  type: 'bubble',   taken: false },
+      { x: 22.45, y: 5.5, side: -1, type: 'confetti', taken: false },
+      { x: 22.45, y: 7.5, side: -1, type: 'fog',      taken: false },
     ];
 
     // confetti is the one place the full spectrum fires — straight off the
@@ -463,10 +465,10 @@
 
     function tryDrop() {
       if (!you.gun || you.busy > 0) return;
-      you.gun = false; gunHintT = 0;
       var gx = you.x + you.face * 0.5, gy = you.y + 0.15;
       if (!walkable(gx, gy)) { gx = you.x; gy = you.y; }
-      floorGuns.push({ x: gx, y: gy });
+      floorGuns.push({ x: gx, y: gy, type: you.gun });
+      you.gun = null; gunHintT = 0;
     }
 
     function tryGun() {
@@ -475,20 +477,22 @@
         for (var g3 = 0; g3 < floorGuns.length; g3++) {         // off the floor first
           var fg = floorGuns[g3];
           if (Math.hypot(fg.x - you.x, fg.y - you.y) < 1.4) {
-            floorGuns.splice(g3, 1); you.gun = true; gunHintT = 5;
+            you.gun = fg.type; floorGuns.splice(g3, 1); gunHintT = 5;
             return;
           }
         }
         for (var i = 0; i < RACKS.length; i++) {
           var r = RACKS[i];
           if (!r.taken && Math.hypot(r.x - you.x, r.y - you.y) < 1.8) {
-            r.taken = true; you.gun = true; gunHintT = 5;
+            r.taken = true; you.gun = r.type; gunHintT = 5;
             return;
           }
         }
         return;             // nothing on the wall near you, nothing in hand
       }
       gunHintT = 0;
+      if (you.gun === 'bubble') { fireBubbles(); return; }
+      if (you.gun === 'fog') { fireFog(); return; }
       flash = 0.07;
       var dir = you.face;
       var mx = you.x + dir * 0.7, my = you.y - 0.45;
@@ -512,6 +516,53 @@
           wc.face = you.x >= wc.x ? 1 : -1;
           if (!reduced) wc.hop = 0.5;
         }
+      }
+    }
+
+    // one 10px sprite per gun type — barrel long, nose round, tank chunky
+    function drawGunSprite(x, y, type, dir) {
+      if (type === 'bubble') {
+        ctx.fillStyle = '#8a8a8a'; ctx.fillRect(x + (dir > 0 ? 2 : 3), y, 5, 2);
+        ctx.fillStyle = '#c8c8c8'; ctx.fillRect(dir > 0 ? x + 7 : x + 1, y, 2, 2);        // round nose
+        ctx.fillStyle = '#565656'; ctx.fillRect(dir > 0 ? x + 3 : x + 6, y + 2, 1, 2);    // grip
+      } else if (type === 'fog') {
+        ctx.fillStyle = '#6a6a6a'; ctx.fillRect(x + (dir > 0 ? 1 : 3), y - 1, 6, 3);      // tank
+        ctx.fillStyle = '#9a9a9a';
+        ctx.fillRect(dir > 0 ? x + 7 : x, y - 1, 3, 1);                                    // flared nozzle
+        ctx.fillRect(dir > 0 ? x + 7 : x, y + 1, 3, 1);
+        ctx.fillStyle = '#565656'; ctx.fillRect(dir > 0 ? x + 3 : x + 6, y + 2, 1, 2);
+      } else {
+        ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x, y, 10, 1);                              // barrel
+        ctx.fillStyle = '#565656'; ctx.fillRect(dir > 0 ? x : x + 7, y + 1, 3, 2);         // stock
+      }
+    }
+
+    // the bubble gun: a gentle burst that rises, wobbles, and pops
+    function fireBubbles() {
+      var dir = you.face;
+      var mx = you.x + dir * 0.7, my = you.y - 0.5;
+      for (var i = 0; i < 9; i++) {
+        bubbles.push({
+          x: mx, y: my,
+          vx: dir * rand(0.5, 1.8), vy: -rand(0.3, 0.9),
+          r: rand(0.12, 0.3), grow: rand(0.02, 0.07),
+          wob: rand(2, 5), ph: rand(0, 6.28),
+          t: 0, life: rand(1.4, 3.2),
+        });
+      }
+    }
+
+    // the fog gun: a slow bank that billows forward and thins out
+    function fireFog() {
+      var dir = you.face;
+      var mx = you.x + dir * 0.8, my = you.y - 0.4;
+      for (var i = 0; i < 12; i++) {
+        fogs.push({
+          x: mx + rand(-0.2, 0.2), y: my + rand(-0.2, 0.2),
+          vx: dir * rand(0.8, 2.4), vy: rand(-0.25, 0.1),
+          r: rand(0.25, 0.5), grow: rand(0.25, 0.5),
+          t: 0, life: rand(2.4, 4.2),
+        });
       }
     }
 
@@ -752,6 +803,23 @@
         p.vx *= (1 - 1.6 * dt);          // drag
         p.x += p.vx * dt; p.y += p.vy * dt;
       }
+      for (j = bubbles.length - 1; j >= 0; j--) {
+        var bb = bubbles[j];
+        bb.t += dt;
+        if (bb.t > bb.life) { bubbles.splice(j, 1); continue; }
+        bb.vx *= (1 - 1.2 * dt);
+        bb.x += (bb.vx + Math.sin(bb.t * bb.wob + bb.ph) * 0.4) * dt;
+        bb.y += bb.vy * dt;
+        bb.r += bb.grow * dt;
+      }
+      for (j = fogs.length - 1; j >= 0; j--) {
+        var fo = fogs[j];
+        fo.t += dt;
+        if (fo.t > fo.life) { fogs.splice(j, 1); continue; }
+        fo.vx *= (1 - 1.4 * dt);
+        fo.x += fo.vx * dt; fo.y += fo.vy * dt;
+        fo.r += fo.grow * dt;
+      }
     }
 
     function draw() {
@@ -783,16 +851,15 @@
         ctx.fillRect(bx + 3, 22, 3, 3);
       }
 
-      // muskets dropped on the floor, waiting to be picked back up
+      // guns dropped on the floor, waiting to be picked back up
       for (var fg2 = 0; fg2 < floorGuns.length; fg2++) {
         var fgd = floorGuns[fg2];
         var fgx = Math.round(fgd.x * S) - 5, fgy = Math.round(fgd.y * S);
         ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(fgx, fgy + 1, 10, 1);
-        ctx.fillStyle = '#9a9a9a'; ctx.fillRect(fgx, fgy, 10, 1);
-        ctx.fillStyle = '#565656'; ctx.fillRect(fgx + 7, fgy - 1, 3, 1);
+        drawGunSprite(fgx, fgy, fgd.type, 1);
       }
 
-      // muskets on the side-room walls, waiting on their pegs
+      // the armory on the side-room walls, waiting on its pegs
       for (var rr2 = 0; rr2 < RACKS.length; rr2++) {
         var rk = RACKS[rr2];
         if (rk.taken) continue;
@@ -800,8 +867,7 @@
         var ry = Math.round(rk.y * S) - 5;
         ctx.fillStyle = '#3a3a3a';
         ctx.fillRect(rx + 2, ry - 1, 1, 3); ctx.fillRect(rx + 7, ry - 1, 1, 3);   // pegs
-        ctx.fillStyle = '#9a9a9a'; ctx.fillRect(rx, ry, 10, 1);                    // barrel
-        ctx.fillStyle = '#565656'; ctx.fillRect(rk.side > 0 ? rx : rx + 7, ry + 1, 3, 2);  // stock
+        drawGunSprite(rx, ry, rk.type, rk.side);
       }
 
       // bodies, back to front
@@ -824,7 +890,15 @@
         ctx.fillRect(x - 1, yb - 6, 2, 2);                      // head
         if (f) ctx.fillRect(x - 1 + (c.face > 0 ? 1 : -1), yb - 1, 1, 1);  // step
         if (c.you) {
-          if (c.gun) {                                          // the musket, carried
+          if (c.gun === 'bubble') {                             // carried, per type
+            ctx.fillStyle = '#8a8a8a'; ctx.fillRect(x + (c.face > 0 ? 1 : -4), yb - 4, 4, 1);
+            ctx.fillStyle = '#c8c8c8'; ctx.fillRect(x + (c.face > 0 ? 5 : -6), yb - 5, 2, 2);
+            ctx.fillStyle = '#ffffff';
+          } else if (c.gun === 'fog') {
+            ctx.fillStyle = '#6a6a6a'; ctx.fillRect(x + (c.face > 0 ? 1 : -5), yb - 5, 4, 2);
+            ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x + (c.face > 0 ? 5 : -7), yb - 4, 2, 1);
+            ctx.fillStyle = '#ffffff';
+          } else if (c.gun) {
             ctx.fillStyle = '#9a9a9a';
             ctx.fillRect(x + (c.face > 0 ? 1 : -6), yb - 4, 6, 1);
             ctx.fillStyle = '#565656';
@@ -926,6 +1000,32 @@
           fctx.arc(cx + Math.cos(aa) * 4.5 * fscale, cy + Math.sin(aa) * 4.5 * fscale, 0.55 * fscale, 0, 7);
           fctx.fill();
         }
+      }
+
+      // bubbles: soap film on the crisp layer — a gray ring, one iridescent
+      // arc sliding around it, and a specular dot
+      for (var b3 = 0; b3 < bubbles.length; b3++) {
+        var bb = bubbles[b3];
+        var bx3 = bb.x * S * fscale, by3 = bb.y * S * fscale, br = bb.r * S * fscale;
+        var fade = Math.min(1, (bb.life - bb.t) / 0.4) * 0.85;
+        fctx.strokeStyle = 'rgba(200,200,200,' + (0.55 * fade) + ')';
+        fctx.lineWidth = Math.max(1, fscale * 0.6);
+        fctx.beginPath(); fctx.arc(bx3, by3, br, 0, 7); fctx.stroke();
+        fctx.strokeStyle = holoCss(bb.ph / 6.28, 0.4, simT + bb.ph, 0.5 * fade);
+        fctx.beginPath(); fctx.arc(bx3, by3, br, bb.ph + simT * 1.5, bb.ph + simT * 1.5 + 1.2); fctx.stroke();
+        fctx.fillStyle = 'rgba(255,255,255,' + (0.7 * fade) + ')';
+        fctx.beginPath(); fctx.arc(bx3 - br * 0.35, by3 - br * 0.35, Math.max(0.6, br * 0.14), 0, 7); fctx.fill();
+      }
+
+      // fog: soft billows that thin as they spread
+      for (var f3 = 0; f3 < fogs.length; f3++) {
+        var fo = fogs[f3];
+        var fx3 = fo.x * S * fscale, fy3 = fo.y * S * fscale, frr = fo.r * S * fscale;
+        var env = Math.sin(Math.min(1, fo.t / fo.life) * Math.PI);
+        fctx.fillStyle = 'rgba(190,190,190,' + (0.10 * env) + ')';
+        fctx.beginPath(); fctx.arc(fx3, fy3, frr, 0, 7); fctx.fill();
+        fctx.fillStyle = 'rgba(150,150,150,' + (0.07 * env) + ')';
+        fctx.beginPath(); fctx.arc(fx3 + frr * 0.3, fy3 - frr * 0.2, frr * 0.7, 0, 7); fctx.fill();
       }
     }
 
