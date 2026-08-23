@@ -68,8 +68,12 @@
     mp.showMobius = Math.random()<0.34;
   }
 
-  // value-noise for a faint background mesh
-  function h(x,y){var n=Math.sin(x*127.1+y*311.7)*43758.5453;return n-Math.floor(n);}
+  // value-noise for a faint background mesh. The lattice hash is precomputed
+  // once into a wrapped table — the same field, none of the per-cell Math.sin
+  // (at high gran the old form burned ~700k sin calls per frame).
+  var HSZ=512, HTAB=new Float32Array(HSZ*HSZ);
+  (function(){ for(var y=0;y<HSZ;y++)for(var x=0;x<HSZ;x++){ var n=Math.sin(x*127.1+y*311.7)*43758.5453; HTAB[y*HSZ+x]=n-Math.floor(n); } })();
+  function h(x,y){ return HTAB[((y&511)<<9)|(x&511)]; }
   function vn(x,y){var xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi;
     var u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
     var a=h(xi,yi),b=h(xi+1,yi),c=h(xi,yi+1),d=h(xi+1,yi+1);
@@ -145,7 +149,33 @@
 
   // ---- grid + buffers ----
   var cols,rows,cellW,cellH,W,H,dpr,zbuf,rib,glint,f,cx,cy;
+  // the faint background field lives on its own layer, refreshed every few
+  // frames — it evolves slowly, and it's most of the cells at high gran
+  var bgCv=document.createElement('canvas'), bctx=bgCv.getContext('2d'), bgTick=0;
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
+  // plain-ink glyphs are stamped from prebaked tiles instead of fillText —
+  // holo-tinted cells (a handful per frame) keep the live text path
+  var atlas=null, atlasKey='', atlasTW=0, atlasTH=0;
+  function buildAtlas(){
+    var ramp=RAMPS[state.charset];
+    var key=state.charset+'|'+state.ink+'|'+cellH.toFixed(2)+'|'+dpr;
+    if(key===atlasKey&&atlas) return;
+    atlasKey=key; atlas=[];
+    atlasTW=Math.ceil(cellW)+4; atlasTH=Math.ceil(cellH)+4;
+    for(var i=0;i<ramp.length;i++){
+      var ch=ramp.charAt(i);
+      if(ch===' '){ atlas.push(null); continue; }
+      var c=document.createElement('canvas');
+      c.width=atlasTW*dpr; c.height=atlasTH*dpr;
+      var g=c.getContext('2d');
+      g.setTransform(dpr,0,0,dpr,0,0);
+      g.font='700 '+(cellH*0.92)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
+      g.textBaseline='top'; g.textAlign='left';
+      g.fillStyle=state.ink;
+      g.fillText(ch,2,2);
+      atlas.push(c);
+    }
+  }
   var TX,TY,TF,TW,TN=0, originX=0, originY=0;  // targets + seed-stagger + write-order stagger + origin point
   var fitS=1, fitX=0, fitY=0, logoPath=null;    // SVG→screen fit + cached vector path (set in build)
   // pen path in SVG (148x168) coords, in writing order:
@@ -179,6 +209,8 @@
     cols=Math.ceil(W/cellW); rows=Math.ceil(H/cellH);
     cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.textBaseline='top'; ctx.textAlign='left';
+    bgCv.width=W*dpr; bgCv.height=H*dpr; bctx.setTransform(dpr,0,0,dpr,0,0);
+    bgTick=0;
     zbuf=new Float32Array(cols*rows); rib=new Float32Array(cols*rows);
     glint=new Float32Array(cols*rows);   // how hard this cell is catching the light, 3D
     buildHoloField();                 // stationary diffraction field, recomputed on resize
@@ -209,6 +241,7 @@
     computeStagger(0); // default origin (top); randomized per-cycle at runtime
     buildWriteOrder(); // order cells along the ㄴ→ㅅ pen path (for Write mode)
     logoPath=new Path2D(LOGO_D); // cached vector for the solid-at-rest crossfade
+    buildAtlas();      // glyph tiles for the current charset/ink/cell size
   }
 
   // p = overall reflow progress 0..1 (0 = pure spinning ribbon, 1 = fully-formed mark)
@@ -293,8 +326,10 @@
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; });
   sheet.addEventListener('pointerleave',function(){ mTarget=0; });
+  var pace=1, paceTick=0;   // >1 = render every nth frame (the lobby blurs us anyway)
   function frame(now){
     if(!running) return;
+    if(pace>1){ paceTick=(paceTick+1)%pace; if(paceTick){ raf=requestAnimationFrame(frame); return; } }
     var dt=(now-lastNow)/1000; lastNow=now; if(dt<0)dt=0; if(dt>0.05)dt=0.05;
     idlePhase += dt*state.float/state.tempo;   // hover/ripple clock — Tempo scales it (master speed)
     chaosT += dt/state.tempo*0.8;              // swarm drift clock
@@ -367,23 +402,47 @@
     for(var di=0;di<dispX.length;di++){ dispX[di]*=dcy; dispY[di]*=dcy; }
     var bobY=(Math.sin(idlePhase*1.5)+Math.sin(idlePhase*0.95+1.3)*0.4)*(H*0.022)*idle;
     var driftX=(Math.sin(idlePhase*0.85)+Math.cos(idlePhase*1.4)*0.35)*(W*0.007)*idle;
+    // ---- background layer: every 3rd rendered frame, into its own canvas.
+    // The field drifts slowly (flowT 0.35/s) and sits under 0.21 alpha, so a
+    // 3-frame refresh is invisible — and it's ~90% of the cells at high gran.
+    if(bgTick%3===0){
+      bctx.clearRect(0,0,W,H);
+      bctx.globalAlpha=1;
+      for(var by=0;by<rows;by++){
+        for(var bx2=0;bx2<cols;bx2++){
+          var bidx=by*cols+bx2;
+          if(rib[bidx]>0.02) continue;                 // mark cells live on the top layer
+          var fluid=fbm(bx2*0.11+flowT*0.4, by*0.14 - flowT*0.2);
+          var bAlpha=(0.10+fluid*0.42)*0.4*bgFade;
+          if(bAlpha<0.055) continue;
+          var bVal=fluid*0.72; if(bVal>1)bVal=1;
+          var bci=Math.round(bVal*RL); if(bci<0)bci=0; if(bci>RL)bci=RL;
+          var btile=atlas[bci]; if(!btile) continue;
+          bctx.globalAlpha=bAlpha;
+          bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW, atlasTH);
+        }
+      }
+      bctx.globalAlpha=1;
+    }
+    bgTick++;
+    ctx.drawImage(bgCv, 0, 0, W, H);
+
+    // ---- mark layer: every frame, sub-pixel continuous
     for(var gy=0;gy<rows;gy++){
       for(var gx=0;gx<cols;gx++){
         var idx=gy*cols+gx, ribB=rib[idx];
-        var hx=gx*cellW, hy=gy*cellH, dx=hx, dy=hy;
-        var val,alpha;
-        if(ribB>0.02){ val=ribB; alpha=ribB;             // mark → floats (sub-pixel continuous)
-          dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*RIP*idle + dispX[idx];
-          dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*RIP*0.8*idle + dispY[idx];
-        } else { var fluid=fbm(gx*0.11+flowT*0.4, gy*0.14 - flowT*0.2);
-              val=fluid*0.72; alpha=(0.10+fluid*0.42)*0.4*bgFade; } // faint living mesh (untouched by cursor)
+        if(ribB<=0.02) continue;
+        var hx=gx*cellW, hy=gy*cellH;
+        var alpha=ribB;
         if(alpha<0.055) continue;
-        if(val>1)val=1;
+        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*RIP*idle + dispX[idx];
+        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*RIP*0.8*idle + dispY[idx];
+        var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
+        var tinted=false;
         if(holo>0.001){
-          var want;
-          var amt = ribB>0.02 ? holo*glint[idx] : 0;
+          var amt=holo*glint[idx];
           if(amt>0.012){
             var lv=(amt*7.999/holo)|0;            // 8 strength steps, so the cache stays small
             var key=(holoIdx[idx]<<3)|lv, cc=holoCache[key];
@@ -395,12 +454,13 @@
                        +((cacheInk[2]+(fb-cacheInk[2])*a)|0)+')';
               holoCache[key]=cc;
             }
-            want=cc;
-          } else want=state.ink;
-          if(want!==lastFill){ ctx.fillStyle=want; lastFill=want; }
+            if(cc!==lastFill){ ctx.fillStyle=cc; lastFill=cc; }
+            tinted=true;
+          }
         }
         ctx.globalAlpha=alpha>1?1:alpha;
-        ctx.fillText(ch, dx, dy);
+        if(tinted) ctx.fillText(ch, dx, dy);
+        else { var tile=atlas[ci]; if(tile) ctx.drawImage(tile, dx-2, dy-2, atlasTW, atlasTH); }
       }
     }
     ctx.globalAlpha=1;
@@ -410,7 +470,10 @@
     cancelAnimationFrame(raf); running=true; rollMotion(); spinAngle=mp.phase; idlePhase=0; cyclePhase=0; loopStarted=false;
     if(TN) computeStagger(state.random?rand(TN):0);
     if(reduce){ start=performance.now()-1e7; lastNow=start; state.loop=false; frame(performance.now()); running=false; return; }
-    start=performance.now(); lastNow=start; raf=requestAnimationFrame(frame);
+    start=performance.now(); lastNow=start;
+    // a page that lands in the lobby starts on the formed mark, not the intro
+    if(opts.skipIntro) start-=(T0*state.tempo*1000+16);
+    raf=requestAnimationFrame(frame);
   }
 
     // paper is the container's background showing through the cleared canvas,
@@ -428,6 +491,7 @@
     return {
       getState: function () { return Object.assign({}, state); },
       play: play,
+      setPace: function (n) { pace = Math.max(1, n | 0); paceTick = 0; },
       setState: function (patch) {
         var clean = sanitize(patch), needBuild = false, needPlay = false;
         for (var k in clean) {
@@ -443,6 +507,7 @@
           // both re-rasterize the mark into the grid, so the targets must be rebuilt
           if (k === 'gran' || k === 'scale') needBuild = true;
           else if (k === 'paper') applyPaper();
+          else if (k === 'charset' || k === 'ink') buildAtlas();
           else if (k === 'loop' || k === 'random' || k === 'reveal') needPlay = true;
         }
         if (needBuild) build();
