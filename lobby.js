@@ -425,6 +425,7 @@
 
     var floorGuns = [];                // guns dropped with Z, lying where they fell
     var bubbles = [], fogs = [];       // what the new guns shoot
+    var cHeld = false, fogAcc = 0;     // held trigger streams the fog machine
 
     // the armory hangs on the side-room walls; C (or a tap) takes one down.
     // one musket and one bubble gun on the left, musket and fog gun right.
@@ -567,20 +568,23 @@
       }
     }
 
-    // the smoke gun: club haze — light, slow, and it hangs in the air
-    function fireFog(sh) {
+    // the smoke gun: club haze with real machine physics — each puff leaves
+    // the nozzle as a fast jet, dissipates, billows as it slows, and climbs
+    // gently the way warm fog does. Hold the trigger and it streams.
+    function emitFogPuff(sh) {
       var dir = sh.face;
-      var mx = sh.x + dir * 0.8, my = sh.y - 0.4;
-      for (var i = 0; i < 8; i++) {
-        fogs.push({
-          x: mx + rand(-0.2, 0.2), y: my + rand(-0.25, 0.15),
-          vx: dir * rand(0.4, 1.4), vy: -rand(0.03, 0.3),
-          r: rand(0.35, 0.6), grow: rand(0.12, 0.28),
-          t: 0, life: rand(3.5, 6),
-          seed: rand(0, 1000),
-        });
-      }
-      while (fogs.length > 40) fogs.shift();   // the room only holds so much haze
+      fogs.push({
+        x: sh.x + dir * 0.8 + rand(-0.1, 0.1), y: sh.y - 0.4 + rand(-0.12, 0.12),
+        vx: dir * rand(2.2, 4.2),
+        vy: rand(-0.25, 0.05),
+        r: rand(0.18, 0.32), grow: rand(0.35, 0.6),
+        t: 0, life: rand(2.6, 4.6),
+        seed: rand(0, 1000), wob: rand(1.5, 3.5),
+      });
+      while (fogs.length > 60) fogs.shift();   // the room only holds so much haze
+    }
+    function fireFog(sh) {
+      for (var i = 0; i < 5; i++) emitFogPuff(sh);
     }
 
     // a 1px ring, plotted the old way (midpoint circle) — no anti-aliasing
@@ -623,11 +627,14 @@
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].indexOf(k) >= 0) {
         keys[k] = true; e.preventDefault();
       } else if (k === 'x') { tryHug(); e.preventDefault(); }
-      else if (k === 'c') { tryGun(); e.preventDefault(); }
+      else if (k === 'c') { if (!e.repeat) tryGun(); cHeld = true; e.preventDefault(); }
       else if (k === 'z') { tryDrop(); e.preventDefault(); }
       else if (k === 'v') { tryDance(); e.preventDefault(); }
     }
-    function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
+    function onKeyUp(e) {
+      keys[e.key.toLowerCase()] = false;
+      if (e.key.toLowerCase() === 'c') cHeld = false;
+    }
     addEventListener('keydown', onKeyDown);
     addEventListener('keyup', onKeyUp);
 
@@ -645,7 +652,11 @@
           if (!rk.taken && Math.hypot(rk.x - tx, rk.y - ty) < 1 &&
               Math.hypot(rk.x - you.x, rk.y - you.y) < 1.8) { tryGun(); return; }
         }
-      } else if (Math.hypot(you.x - tx, you.y - ty) < 1) { tryGun(); return; }
+      } else if (Math.hypot(you.x - tx, you.y - ty) < 1) {
+        tryGun();
+        if (you.gun === 'fog') cHeld = true;    // press-and-hold streams; pointerup releases
+        return;
+      }
       if (!you.gun && Math.hypot(you.x - tx, you.y - ty) < 1) { tryDance(); return; }   // tap yourself: dance
 
       if (!walkable(tx, ty)) {           // tapped a wall or the void → nearest floor
@@ -659,6 +670,8 @@
       routeTo(you, tx, ty);
     }
     panel.addEventListener('pointerdown', onPointerDown);
+    function onPointerUp() { cHeld = false; }
+    addEventListener('pointerup', onPointerUp);
 
     // ---- live joins
     var es = null;
@@ -888,12 +901,21 @@
         bb.y += bb.vy * dt;
         bb.r += bb.grow * dt;
       }
+      // the fog machine streams while the trigger is held
+      if (cHeld && you.gun === 'fog' && you.busy <= 0) {
+        fogAcc += dt * 16;
+        while (fogAcc >= 1) { emitFogPuff(you); fogAcc--; }
+      } else { fogAcc = 0; }
       for (j = fogs.length - 1; j >= 0; j--) {
         var fo = fogs[j];
         fo.t += dt;
         if (fo.t > fo.life) { fogs.splice(j, 1); continue; }
-        fo.vx *= (1 - 1.4 * dt);
+        fo.vx *= (1 - 2.4 * dt);                       // the jet dissipates fast
+        fo.vy *= (1 - 1.2 * dt);
+        fo.vy -= 0.10 * dt;                            // warm fog climbs, gently
+        fo.vx += Math.sin(simT * fo.wob + fo.seed) * 0.5 * dt;   // billowing wander
         fo.x += fo.vx * dt; fo.y += fo.vy * dt;
+        fo.grow *= (1 - 0.45 * dt);                    // expands fast, then holds
         fo.r += fo.grow * dt;
       }
     }
@@ -919,7 +941,7 @@
       // three decks against the hall's top wall — the boxes and their beeping
       // dots stay pixel; the records themselves spin on the crisp overlay
       for (var u = 0; u < 3; u++) {
-        var bx = 57 + u * 48;
+        var bx = 65 + u * 45;      // three decks, centred on the hall's top wall
         ctx.fillStyle = '#3a3a3a'; ctx.fillRect(bx, 9, 30, 19);
         ctx.fillStyle = ((simT * 2 + u) | 0) % 3
           ? holoCss(u / 3, 0.2, simT * 0.8 + u * 2.1, 0.95)
@@ -1100,7 +1122,7 @@
     function drawRecords() {
       fctx.clearRect(0, 0, fx.width, fx.height);
       for (var u = 0; u < 3; u++) {
-        var cx = (57 + u * 48 + 16) * fscale, cy = 18.5 * fscale;
+        var cx = (65 + u * 45 + 16) * fscale, cy = 18.5 * fscale;
         fctx.fillStyle = '#141414';
         fctx.beginPath(); fctx.arc(cx, cy, 6.5 * fscale, 0, 7); fctx.fill();      // the vinyl
         fctx.strokeStyle = '#2e2e2e'; fctx.lineWidth = Math.max(1, fscale * 0.8);
@@ -1145,6 +1167,7 @@
         if (es) es.close();
         removeEventListener('keydown', onKeyDown);
         removeEventListener('keyup', onKeyUp);
+        removeEventListener('pointerup', onPointerUp);
         removeEventListener('resize', sizeFx);
         wrap.remove();
       },

@@ -94,6 +94,21 @@
     100% { border-color: rgba(255,255,255,0.1); box-shadow: 0 0 0 20px rgba(255,255,255,0); }
   }
 
+  .foot .enter {
+    appearance: none; cursor: pointer;
+    font: 12px/1 var(--mono);
+    letter-spacing: 0.12em;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    padding: 12px 26px;
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+  .foot .enter:hover { border-color: rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.09); }
+
   .said {
     height: 0;
     font-size: 10px;
@@ -210,6 +225,7 @@
     <input id="word" type="password" name="gate" placeholder="password" aria-label="Password" required>
     <button type="submit" aria-label="Enter">→</button>
   </form>
+  <button class="enter" id="enter" hidden>enter room</button>
   <div class="said" id="said" role="status" aria-live="polite"></div>
 </div>
 
@@ -233,17 +249,22 @@
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv = document.getElementById('cv');
   const foot = document.getElementById('foot');
-  let ribbon = null, lobby = null;
+  const line = document.getElementById('line');
+  const formEl = document.getElementById('sub');
+  const said = document.getElementById('said');
+  const enterBtn = document.getElementById('enter');
+  let ribbon = null, lobby = null, savedMouse = null;
 
   // The lobby is a small centered window; the mesh keeps playing behind it,
   // pushed back — a little blurred, a little darker.
   function bootLobby(animate) {
     if (lobby) return lobby;
-    if (foot.parentNode) foot.remove();
+    foot.style.display = 'none';
     cv.style.transition = animate ? 'opacity 1200ms ease, filter 1200ms ease' : 'none';
     cv.style.opacity = '1';                          // undo the beam's dimming
     cv.style.filter = 'blur(4px) brightness(0.55)';
     if (ribbon) {
+      if (savedMouse === null) savedMouse = ribbon.getState().mouse;
       ribbon.setState({ mouse: 0 });   // backdrop, not a toy, while the lobby is up
       ribbon.setPace(2);               // and blurred anyway — half rate is invisible
     }
@@ -251,6 +272,28 @@
     lobby = createLobby({ count: 1, reduced });
     return lobby;
   }
+
+  // Esc steps back out: the room closes, the mesh sharpens, and the foot
+  // returns as a doorway — one button for those already aboard.
+  function exitLobby() {
+    if (!lobby) return;
+    lobby.destroy();
+    lobby = null;
+    if (ribbon) {
+      ribbon.setPace(1);
+      if (savedMouse !== null) ribbon.setState({ mouse: savedMouse });
+    }
+    cv.style.transition = 'filter 700ms ease, opacity 700ms ease';
+    cv.style.filter = 'none';
+    foot.style.display = '';
+    foot.style.opacity = '1';        // it may still carry the beam's fade-out
+    line.textContent = 'welcome back';
+    formEl.style.display = 'none';
+    enterBtn.hidden = false;
+    said.classList.remove('on');
+  }
+
+  enterBtn.addEventListener('click', () => bootLobby(false));
 
   // Joined once from this device → the panel is already there on arrival.
   const remembered = localStorage.getItem('ency_joined') === '1';
@@ -418,7 +461,11 @@
 
   document.getElementById('lock').addEventListener('click', () => open(true));
   scrim.addEventListener('click', e => { if (e.target === scrim) open(false); });
-  addEventListener('keydown', e => { if (e.key === 'Escape') open(false); });
+  addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (scrim.classList.contains('on')) { open(false); return; }
+    if (lobby) exitLobby();          // step back out to the mesh
+  });
 
   document.getElementById('unlock').addEventListener('submit', async e => {
     e.preventDefault();
