@@ -171,7 +171,7 @@
   // holo-tinted cells (a handful per frame) keep the live text path.
   // Three sizes per glyph: shards nearer the camera stamp a step larger,
   // farther a step smaller — quantised so the grid feel survives.
-  var ATLAS_SCALES=[0.78, 1, 1.24];   // far, base, near
+  var ATLAS_SCALES=[0.86, 1, 1.16];   // far, base, near — gentle, so depth never reads as blur
   var atlas=null, atlasKey='', atlasTW=null, atlasTH=null, atlasOX=null, atlasOY=null, atlasFonts=null;
   function buildAtlas(){
     var ramp=RAMPS[state.charset];
@@ -346,7 +346,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,solidEase=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -481,13 +481,21 @@
     }
 
     // ---- mark layer: every frame, sub-pixel continuous.
-    // The merge happens in the mosaic's own medium: as the morph settles,
-    // each landed cell fattens from its glyph into a full solid block, and
-    // neighbouring blocks bleed into one another until the mark is one
-    // continuous filled shape — no overlay, the grid itself fuses. The
-    // cursor melts it back into grains locally, and the per-cell ripple
-    // quiets as the shape solidifies so the fused surface doesn't crack.
-    var solidA=(m-0.85)/0.15; if(solidA<0)solidA=0; if(solidA>1)solidA=1;
+    // The merge happens in the mosaic's own medium: each landed cell fattens
+    // from its glyph into a full solid block, and neighbouring blocks bleed
+    // into one another until the mark is one continuous filled shape — no
+    // overlay, the grid itself fuses.
+    //
+    // The fuse runs on its OWN clock, not on the morph: glyphs land fully
+    // first (the formation is untouched), then the weld happens as its own
+    // quiet beat about a second later — and on dissolve it melts back to
+    // glyphs quickly, before anything has moved, so fused chunks never fly.
+    var sTarget = m>0.995 ? 1 : 0;
+    if(reduce) solidEase=sTarget;
+    solidEase += (sTarget-solidEase)*Math.min(1, dt*(sTarget?1.6:4.5));
+    var solidA = solidEase<0.012 ? 0 : solidEase>0.988 ? 1 : solidEase;
+    // per-cell ripple quiets only once truly fused, so the bend texture
+    // stays alive through the whole formation
     var ripAmt=RIP*(1-solidA*0.85);
     var holeR=mRv*1.1;
     var holeOn=solidA>0.001 && state.mouse>0 && mAmt>0.02;
