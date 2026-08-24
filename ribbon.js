@@ -152,6 +152,9 @@
   // the faint background field lives on its own layer, refreshed every few
   // frames — it evolves slowly, and it's most of the cells at high gran
   var bgCv=document.createElement('canvas'), bctx=bgCv.getContext('2d'), bgTick=0;
+  // the resting mark is drawn solid on its own layer, so the cursor can
+  // punch a local hole in it (revealing the grains) without touching them
+  var solidCv=document.createElement('canvas'), sctx=solidCv.getContext('2d');
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
   // the quantised diffraction colour for a cell, cached per (cell colour, level)
   function holoColorAt(idxc, lv, holo){
@@ -234,6 +237,7 @@
     cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.textBaseline='top'; ctx.textAlign='left';
     bgCv.width=W*dpr; bgCv.height=H*dpr; bctx.setTransform(dpr,0,0,dpr,0,0);
+    solidCv.width=W*dpr; solidCv.height=H*dpr; sctx.setTransform(dpr,0,0,dpr,0,0);
     bgTick=0;
     zbuf=new Float32Array(cols*rows); rib=new Float32Array(cols*rows);
     glint=new Float32Array(cols*rows);   // how hard this cell is catching the light, 3D
@@ -348,7 +352,8 @@
 
   var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
-  sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; });
+  var lastMove=-1e9;
+  sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
   sheet.addEventListener('pointerleave',function(){ mTarget=0; });
   var pace=1, paceTick=0;   // >1 = render every nth frame (the lobby blurs us anyway)
   function frame(now){
@@ -410,18 +415,30 @@
     // idle motion applied HERE as continuous draw offsets → the mark floats smoothly, off the grid
     // Float = whole-shape hover (bob/drift) · Bend = how much each char warps → the shape bends/stretches
     var idle=m, RIP=cellW*0.8*state.bend;
-    // cursor swipe shoves grains along the movement; Freedom lets them travel further, scatter, settle looser
-    mAmt += (mTarget-mAmt)*0.4;
+    // cursor swipe shoves grains along the movement; Freedom lets them travel
+    // further, scatter, settle looser. Velocity matters now: a fast flick
+    // sweeps a wider, harder swath, and the influence stretches into a wake
+    // along the direction of travel instead of a plain circle.
+    if(now-lastMove>700) mTarget=0;         // idle cursor releases its hold
+    mAmt += (mTarget-mAmt)*0.55;            // quicker attack
     var mvx=mx-pmx, mvy=my-pmy; pmx=mx; pmy=my;
-    var mR=Math.min(W,H)*0.20*(1+state.freedom*0.6), mR2=mR*mR;
-    if(state.mouse>0 && mAmt>0.02 && (mvx!==0||mvy!==0)){
-      var mStr=state.mouse*0.95*mAmt, cap=mR*(0.9+state.freedom*2.6), perpAmt=state.freedom*1.7;
-      var c0=Math.max(0,((mx-mR)/cellW)|0), c1=Math.min(cols-1,((mx+mR)/cellW)|0);
-      var r0=Math.max(0,((my-mR)/cellH)|0), r1=Math.min(rows-1,((my+mR)/cellH)|0);
+    var spd=Math.sqrt(mvx*mvx+mvy*mvy);
+    var vBoost=Math.min(1.4, spd/26);
+    var mR=Math.min(W,H)*0.20*(1+state.freedom*0.6);
+    var mRv=mR*(1+vBoost*0.7);
+    if(state.mouse>0 && mAmt>0.02 && spd>0){
+      var mStr=state.mouse*0.95*mAmt*(1+vBoost*0.5), cap=mR*(0.9+state.freedom*2.6), perpAmt=state.freedom*1.7;
+      var ux=mvx/spd, uy=mvy/spd;
+      var ext=mRv*1.5;
+      var c0=Math.max(0,((mx-ext)/cellW)|0), c1=Math.min(cols-1,((mx+ext)/cellW)|0);
+      var r0=Math.max(0,((my-ext)/cellH)|0), r1=Math.min(rows-1,((my+ext)/cellH)|0);
+      var aa2=mRv*mRv*2.2, bb2=mRv*mRv*0.45;   // wake ellipse: long along travel, tight across
       for(var gy2=r0;gy2<=r1;gy2++)for(var gx2=c0;gx2<=c1;gx2++){
         var mi=gy2*cols+gx2; if(rib[mi]<=0.02) continue;
-        var ax=gx2*cellW+cellW*0.5-mx, ay=gy2*cellH+cellH*0.5-my, ad2=ax*ax+ay*ay;
-        if(ad2<mR2){ var ff=1-Math.sqrt(ad2)/mR; ff*=ff;
+        var ax=gx2*cellW+cellW*0.5-mx, ay=gy2*cellH+cellH*0.5-my;
+        var dpar=ax*ux+ay*uy, dperp=ax*uy-ay*ux;
+        var qq=dpar*dpar/aa2+dperp*dperp/bb2;
+        if(qq<1){ var ff=1-Math.sqrt(qq); ff*=ff;
           var hh=Math.sin(mi*12.9898)*43758.5453; hh=(hh-Math.floor(hh))-0.5;   // stable per-grain scatter
           var sx=-mvy*hh*perpAmt, sy=mvx*hh*perpAmt;                             // ⊥ to the swipe → grains fan out
           var vX=dispX[mi]+(mvx+sx)*ff*mStr, vY=dispY[mi]+(mvy+sy)*ff*mStr;
@@ -459,13 +476,28 @@
       ctx.drawImage(bgCv, 0, 0, W, H);
     }
 
-    // ---- mark layer: every frame, sub-pixel continuous
+    // ---- mark layer: every frame, sub-pixel continuous.
+    // As the solid mark fades in, the mosaic fades down so no glyphs fringe
+    // past the vector edge — except near the cursor, where the grains stay
+    // full for the local dissolve.
+    var solidA=(m-0.96)/0.04; if(solidA<0)solidA=0; if(solidA>1)solidA=1;
+    var mosDim=1-solidA*0.9;
+    var holeR=mRv*1.1;
+    var holeOn=solidA>0.001 && state.mouse>0 && mAmt>0.02;
     for(var gy=0;gy<rows;gy++){
       for(var gx=0;gx<cols;gx++){
         var idx=gy*cols+gx, ribB=rib[idx];
         if(ribB<=0.02) continue;
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
+        if(solidA>0.001){
+          var af=mosDim;
+          if(holeOn){
+            var hdx=hx-mx, hdy=hy-my, hdd=Math.sqrt(hdx*hdx+hdy*hdy);
+            if(hdd<holeR){ var pr=1-hdd/holeR; af+= (1-af)*Math.min(1,pr*1.6); }
+          }
+          alpha*=af;
+        }
         if(alpha<0.055) continue;
         var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*RIP*idle + dispX[idx];
         var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*RIP*0.8*idle + dispY[idx];
@@ -511,6 +543,32 @@
         }
         else { var tile=atlas[sb][ci]; if(tile) ctx.drawImage(tile, dx+atlasOX[sb], dy+atlasOY[sb], atlasTW[sb], atlasTH[sb]); }
       }
+    }
+    // ---- the merge: as the morph settles, the mosaic crossfades into the
+    // original vector mark — the block seams go, and what rests is the drawn
+    // logo itself, floating on the same idle offsets. The cursor punches a
+    // soft local hole in the solid, dissolving it back into its grains.
+    if(solidA>0.001 && logoPath){
+      sctx.clearRect(0,0,W,H);
+      sctx.fillStyle=state.ink;
+      sctx.save();
+      sctx.translate(fitX+driftX, fitY+bobY);
+      sctx.scale(fitS,fitS);
+      sctx.fill(logoPath,'evenodd');
+      sctx.restore();
+      if(state.mouse>0 && mAmt>0.02){
+        var hr=mRv*1.1;
+        var grad=sctx.createRadialGradient(mx,my,0,mx,my,hr);
+        grad.addColorStop(0,'rgba(0,0,0,1)');
+        grad.addColorStop(0.55,'rgba(0,0,0,0.85)');
+        grad.addColorStop(1,'rgba(0,0,0,0)');
+        sctx.globalCompositeOperation='destination-out';
+        sctx.fillStyle=grad;
+        sctx.beginPath(); sctx.arc(mx,my,hr,0,7); sctx.fill();
+        sctx.globalCompositeOperation='source-over';
+      }
+      ctx.globalAlpha=solidA;
+      ctx.drawImage(solidCv,0,0,W,H);
     }
     ctx.globalAlpha=1;
     raf=requestAnimationFrame(frame);
