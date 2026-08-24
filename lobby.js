@@ -389,7 +389,9 @@
       'text-shadow:0 1px 3px rgba(0,0,0,0.9);transform:translate(-50%,-100%);' +
       'opacity:0;transition:opacity 160ms ease;pointer-events:none;';
     panel.appendChild(tipEl);
-    var tipHold = 0;
+    // each action nudge flashes once, the first time it's in reach, then
+    // trusts you know — never again this visit
+    var tipSeen = {}, tipFlashT = 0, tipFlashKind = null;
 
     // ---- population
     var SHADES = ['#8a8a8a', '#9a9a9a', '#aaaaaa', '#7c7c7c', '#b4b4b4'];
@@ -537,34 +539,36 @@
       }
     }
 
-    // the bubble gun: a gentle burst that rises, wobbles, and pops
+    // the bubble gun: a few distinct bubbles, leaving the nose one by one so
+    // each gets its own air
     function fireBubbles() {
       var dir = you.face;
       var mx = you.x + dir * 0.7, my = you.y - 0.5;
-      for (var i = 0; i < 9; i++) {
+      for (var i = 0; i < 5; i++) {
         bubbles.push({
           x: mx, y: my,
-          vx: dir * rand(0.5, 1.8), vy: -rand(0.3, 0.9),
-          r: rand(0.12, 0.3), grow: rand(0.02, 0.07),
+          vx: dir * rand(0.4, 1.7), vy: -rand(0.25, 1.0),
+          r: rand(0.12, 0.32), grow: rand(0.02, 0.07),
           wob: rand(2, 5), ph: rand(0, 6.28),
-          t: 0, life: rand(1.4, 3.2),
+          t: -i * 0.16, life: rand(1.4, 3.2),
         });
       }
     }
 
-    // the fog gun: a slow bank that billows forward and thins out
+    // the smoke gun: club haze — light, slow, and it hangs in the air
     function fireFog() {
       var dir = you.face;
       var mx = you.x + dir * 0.8, my = you.y - 0.4;
-      for (var i = 0; i < 12; i++) {
+      for (var i = 0; i < 8; i++) {
         fogs.push({
-          x: mx + rand(-0.2, 0.2), y: my + rand(-0.2, 0.2),
-          vx: dir * rand(0.8, 2.4), vy: rand(-0.25, 0.1),
-          r: rand(0.25, 0.5), grow: rand(0.25, 0.5),
-          t: 0, life: rand(2.4, 4.2),
-          seed: rand(0, 1000),      // grains hold their place as the puff grows
+          x: mx + rand(-0.2, 0.2), y: my + rand(-0.25, 0.15),
+          vx: dir * rand(0.4, 1.4), vy: -rand(0.03, 0.3),
+          r: rand(0.35, 0.6), grow: rand(0.12, 0.28),
+          t: 0, life: rand(3.5, 6),
+          seed: rand(0, 1000),
         });
       }
+      while (fogs.length > 40) fogs.shift();   // the room only holds so much haze
     }
 
     // a 1px ring, plotted the old way (midpoint circle) — no anti-aliasing
@@ -797,7 +801,7 @@
         }
       }
       if (gunHintT > 0) gunHintT -= dt;
-      if (tipHold > 0) tipHold -= dt;
+      if (tipFlashT > 0) tipFlashT -= dt;
 
       glintTimer -= dt;
       if (glintTimer <= 0) {
@@ -821,6 +825,7 @@
       for (j = bubbles.length - 1; j >= 0; j--) {
         var bb = bubbles[j];
         bb.t += dt;
+        if (bb.t < 0) continue;                  // still queued in the nozzle
         if (bb.t > bb.life) { bubbles.splice(j, 1); continue; }
         bb.vx *= (1 - 1.2 * dt);
         bb.x += (bb.vx + Math.sin(bb.t * bb.wob + bb.ph) * 0.4) * dt;
@@ -929,34 +934,35 @@
         }
       }
 
-      // a nudge when an action is in reach — one at a time, nearest first;
-      // once shown it holds for a second rather than flickering off
+      // a nudge when an action is first in reach — flashes once per kind,
+      // then never again this visit
       var tip = null;
       var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
-      if (ns) tip = { x: ns.x, y: ns.y - 1.1, s: (touch ? 'tap' : 'x') + ' · hug' };
+      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: (touch ? 'tap' : 'x') + ' · hug' };
       else if (!you.gun) {
         for (var tg = 0; tg < floorGuns.length && !tip; tg++) {
           var tfg = floorGuns[tg];
           if (Math.hypot(tfg.x - you.x, tfg.y - you.y) < 1.4)
-            tip = { x: tfg.x, y: tfg.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
+            tip = { k: 'take', x: tfg.x, y: tfg.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
         }
         for (var ti = 0; ti < RACKS.length && !tip; ti++) {
           var tr = RACKS[ti];
           if (!tr.taken && Math.hypot(tr.x - you.x, tr.y - you.y) < 1.8)
-            tip = { x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
+            tip = { k: 'take', x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
         }
       } else if (gunHintT > 0) {
-        tip = { x: you.x, y: you.y - 1.2, s: touch ? 'tap · fire' : 'c · fire  z · drop' };
+        tip = { k: 'fire', x: you.x, y: you.y - 1.2, s: touch ? 'tap · fire' : 'c · fire  z · drop' };
       }
-      if (tip) {
-        tipHold = 1;
+      if (tip && !tipSeen[tip.k]) {
+        tipSeen[tip.k] = true;                   // one flash, then it's yours
+        tipFlashKind = tip.k; tipFlashT = 1.6;
+      }
+      if (tipFlashT > 0 && tip && tip.k === tipFlashKind) {
         tipEl.textContent = tip.s;
         tipEl.style.left = Math.max(9, Math.min(91, tip.x / W * 100)) + '%';
         tipEl.style.top = (tip.y / H * 100) + '%';
-        tipEl.style.opacity = '1';
-      } else if (tipHold <= 0) {
-        tipEl.style.opacity = '0';
       }
+      tipEl.style.opacity = tipFlashT > 0 ? '1' : '0';
 
       // confetti — the only full-spectrum moment in the room
       for (var pc = 0; pc < confetti.length; pc++) {
@@ -977,18 +983,26 @@
           ctx.fillRect(hxp + HEART[hq][0], hyp + HEART[hq][1], 1, 1);
       }
 
-      // fog: a dithered pixel bank — stable grains that spread and thin
+      // smoke: a checker-dithered haze — light, soft-edged, club air. Every
+      // other pixel inside a squashed disc, thinning toward the rim.
       for (var f3 = 0; f3 < fogs.length; f3++) {
         var fo = fogs[f3];
-        var fcx = fo.x * S, fcy = fo.y * S, frr = fo.r * S;
+        var fcx = (fo.x * S) | 0, fcy = (fo.y * S) | 0;
+        var R = Math.max(2, (fo.r * S) | 0);
         var env = Math.sin(Math.min(1, fo.t / fo.life) * Math.PI);
-        var nd = (28 * env) | 0;
-        for (var di = 0; di < nd; di++) {
-          var h1 = Math.sin(fo.seed + di * 12.9898) * 43758.5453; h1 -= Math.floor(h1);
-          var h2 = Math.sin(fo.seed + di * 78.233) * 43758.5453; h2 -= Math.floor(h2);
-          var fang = h1 * 6.283, frad = Math.sqrt(h2) * frr;
-          ctx.fillStyle = di % 3 === 0 ? '#5a5a5a' : di % 3 === 1 ? '#454545' : '#383838';
-          ctx.fillRect((fcx + Math.cos(fang) * frad) | 0, (fcy + Math.sin(fang) * frad * 0.7) | 0, 1, 1);
+        ctx.fillStyle = 'rgba(205,208,212,' + (0.30 * env).toFixed(3) + ')';
+        var R2 = R * R;
+        for (var py = -R; py <= R; py++) {
+          for (var px = -R; px <= R; px++) {
+            if ((px + py + fcx + fcy) & 1) continue;          // the dither
+            var dd = px * px + py * py * 2;                   // squashed disc
+            if (dd > R2) continue;
+            if (dd > R2 * 0.45) {                             // rim thins out, stably per puff
+              var hh = Math.sin(fo.seed + px * 12.9898 + py * 78.233) * 43758.5453;
+              if ((hh - Math.floor(hh)) > env * 0.75) continue;
+            }
+            ctx.fillRect(fcx + px, fcy + py, 1, 1);
+          }
         }
       }
 
@@ -996,6 +1010,7 @@
       // into four sparks at the end
       for (var b3 = 0; b3 < bubbles.length; b3++) {
         var bb = bubbles[b3];
+        if (bb.t < 0) continue;                  // hasn't left the nozzle yet
         var bcx = Math.round(bb.x * S), bcy = Math.round(bb.y * S);
         var br = Math.max(1, Math.round(bb.r * S));
         if (bb.life - bb.t < 0.12) {                 // the pop
