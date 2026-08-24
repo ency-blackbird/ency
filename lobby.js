@@ -401,8 +401,9 @@
         shade: SHADES[(Math.random() * SHADES.length) | 0],
         pause: rand(0.5, 3), speed: rand(1.1, 1.9),
         moving: false, face: 1,
-        busy: 0, hugWith: null, gun: false, hop: 0, noticeCd: 0,
+        busy: 0, hugWith: null, gun: null, hop: 0, noticeCd: 0,
         dance: 0, jamT: rand(3, 12),
+        seekGun: false, fireT: 0, dropT: 0,
       };
     }
 
@@ -440,6 +441,12 @@
     for (var cw = 400; cw <= 680; cw += 40) {
       var cc = wl2rgb(cw);
       CONF.push('rgb(' + ((cc[0] * 255) | 0) + ',' + ((cc[1] * 255) | 0) + ',' + ((cc[2] * 255) | 0) + ')');
+    }
+
+    function npcArmed() {
+      var n = 0;
+      for (var i = 1; i < chars.length; i++) if (chars[i].gun) n++;
+      return n;
     }
 
     function nearestStranger(maxD) {
@@ -493,11 +500,16 @@
         return;             // nothing on the wall near you, nothing in hand
       }
       gunHintT = 0;
-      if (you.gun === 'bubble') { fireBubbles(); return; }
-      if (you.gun === 'fog') { fireFog(); return; }
-      flash = 0.07;
-      var dir = you.face;
-      var mx = you.x + dir * 0.7, my = you.y - 0.45;
+      fireGun(you);
+    }
+
+    // anyone holding a gun fires it the same way — you or a stranger
+    function fireGun(sh) {
+      if (sh.gun === 'bubble') { fireBubbles(sh); return; }
+      if (sh.gun === 'fog') { fireFog(sh); return; }
+      if (sh.you) flash = 0.07;
+      var dir = sh.face;
+      var mx = sh.x + dir * 0.7, my = sh.y - 0.45;
       for (var p = 0; p < 24; p++) {
         var a = rand(-0.75, 0.15);                 // mostly upward, out of the muzzle
         var sp = rand(3.5, 9);
@@ -509,13 +521,15 @@
           c: CONF[(Math.random() * CONF.length) | 0],
         });
       }
-      var bx2 = you.x - dir * 0.18;                // recoil
-      if (canStand(bx2, you.y)) you.x = bx2;
-      // everyone nearby turns to look, and hops
-      for (var w = 1; w < chars.length; w++) {
+      var bx2 = sh.x - dir * 0.18;                 // recoil
+      if (canStand(bx2, sh.y)) sh.x = bx2;
+      // everyone nearby turns to look, and hops — except the shooter, and
+      // except you: your facing is yours
+      for (var w = 0; w < chars.length; w++) {
         var wc = chars[w];
-        if (Math.hypot(wc.x - you.x, wc.y - you.y) < 3.2) {
-          wc.face = you.x >= wc.x ? 1 : -1;
+        if (wc === sh || wc.you) continue;
+        if (Math.hypot(wc.x - sh.x, wc.y - sh.y) < 3.2) {
+          wc.face = sh.x >= wc.x ? 1 : -1;
           if (!reduced) wc.hop = 0.5;
         }
       }
@@ -541,9 +555,9 @@
 
     // the bubble gun: a few distinct bubbles, leaving the nose one by one so
     // each gets its own air
-    function fireBubbles() {
-      var dir = you.face;
-      var mx = you.x + dir * 0.7, my = you.y - 0.5;
+    function fireBubbles(sh) {
+      var dir = sh.face;
+      var mx = sh.x + dir * 0.7, my = sh.y - 0.5;
       for (var i = 0; i < 5; i++) {
         bubbles.push({
           x: mx, y: my,
@@ -556,9 +570,9 @@
     }
 
     // the smoke gun: club haze — light, slow, and it hangs in the air
-    function fireFog() {
-      var dir = you.face;
-      var mx = you.x + dir * 0.8, my = you.y - 0.4;
+    function fireFog(sh) {
+      var dir = sh.face;
+      var mx = sh.x + dir * 0.8, my = sh.y - 0.4;
       for (var i = 0; i < 8; i++) {
         fogs.push({
           x: mx + rand(-0.2, 0.2), y: my + rand(-0.25, 0.15),
@@ -738,6 +752,19 @@
           c.dance -= dt;
           c.face = ((simT * 6) | 0) % 2 ? 1 : -1;   // flips to the beat
         }
+        // an armed stranger plays with the thing, then sets it down for the
+        // next person
+        if (c.gun) {
+          c.fireT -= dt;
+          if (c.fireT <= 0 && c.busy <= 0) { fireGun(c); c.fireT = rand(2.5, 6); }
+          c.dropT -= dt;
+          if (c.dropT <= 0) {
+            var dgx = c.x + c.face * 0.5, dgy = c.y + 0.15;
+            if (!walkable(dgx, dgy)) { dgx = c.x; dgy = c.y; }
+            floorGuns.push({ x: dgx, y: dgy, type: c.gun });
+            c.gun = null;
+          }
+        }
         if (c.busy > 0) {
           c.busy -= dt; c.moving = false;
           if (c.busy <= 0) c.hugWith = null;
@@ -765,9 +792,25 @@
           continue;
         }
         if (!stepMove(c, dt, c.speed)) {
+          if (c.seekGun) {                         // arrived where a gun was lying
+            c.seekGun = false;
+            for (var fgi = 0; fgi < floorGuns.length; fgi++) {
+              var fgc = floorGuns[fgi];
+              if (Math.hypot(fgc.x - c.x, fgc.y - c.y) < 1.3) {
+                c.gun = fgc.type; floorGuns.splice(fgi, 1);
+                c.fireT = rand(0.8, 2.5); c.dropT = rand(14, 30);
+                break;
+              }
+            }
+          }
           c.pause = rand(1.5, 6);
           var roll = Math.random(), t;
-          if (roll < 0.15) {                       // sometimes they come say hi
+          if (!c.gun && floorGuns.length && npcArmed() < 2 && roll < 0.2) {
+            var fgt = floorGuns[(Math.random() * floorGuns.length) | 0];
+            t = { x: fgt.x, y: fgt.y };            // curiosity: go see the thing
+            c.seekGun = true;
+            c.pause = rand(0.3, 1);
+          } else if (roll < 0.15) {                // sometimes they come say hi
             var gx2 = you.x + rand(-1.2, 1.2), gy2 = you.y + rand(-1, 1);
             t = walkable(gx2, gy2) ? { x: gx2, y: gy2 } : anyTile();
           } else if (roll < 0.4) {                 // or drift to the consoles
@@ -909,24 +952,20 @@
         ctx.fillRect(x - 1, yb - 4, 2, 3);                      // body
         ctx.fillRect(x - 1, yb - 6, 2, 2);                      // head
         if (f) ctx.fillRect(x - 1 + (c.face > 0 ? 1 : -1), yb - 1, 1, 1);  // step
+        // whatever anyone carries, drawn the same — you or a stranger
+        if (c.gun === 'bubble') {
+          ctx.fillStyle = '#8a8a8a'; ctx.fillRect(x + (c.face > 0 ? 1 : -4), yb - 4, 4, 1);
+          ctx.fillStyle = '#c8c8c8'; ctx.fillRect(x + (c.face > 0 ? 5 : -6), yb - 5, 2, 2);
+        } else if (c.gun === 'fog') {
+          ctx.fillStyle = '#6a6a6a'; ctx.fillRect(x + (c.face > 0 ? 1 : -5), yb - 5, 4, 2);
+          ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x + (c.face > 0 ? 5 : -7), yb - 4, 2, 1);
+        } else if (c.gun) {
+          ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x + (c.face > 0 ? 1 : -6), yb - 4, 6, 1);
+          ctx.fillStyle = '#565656'; ctx.fillRect(x + (c.face > 0 ? 1 : -2), yb - 3, 2, 1);
+        }
         if (c.you) {
-          if (c.gun === 'bubble') {                             // carried, per type
-            ctx.fillStyle = '#8a8a8a'; ctx.fillRect(x + (c.face > 0 ? 1 : -4), yb - 4, 4, 1);
-            ctx.fillStyle = '#c8c8c8'; ctx.fillRect(x + (c.face > 0 ? 5 : -6), yb - 5, 2, 2);
-            ctx.fillStyle = '#ffffff';
-          } else if (c.gun === 'fog') {
-            ctx.fillStyle = '#6a6a6a'; ctx.fillRect(x + (c.face > 0 ? 1 : -5), yb - 5, 4, 2);
-            ctx.fillStyle = '#9a9a9a'; ctx.fillRect(x + (c.face > 0 ? 5 : -7), yb - 4, 2, 1);
-            ctx.fillStyle = '#ffffff';
-          } else if (c.gun) {
-            ctx.fillStyle = '#9a9a9a';
-            ctx.fillRect(x + (c.face > 0 ? 1 : -6), yb - 4, 6, 1);
-            ctx.fillStyle = '#565656';
-            ctx.fillRect(x + (c.face > 0 ? 1 : -2), yb - 3, 2, 1);
-            ctx.fillStyle = '#ffffff';
-          } else {
-            ctx.fillRect(x + (c.face > 0 ? 2 : -3), yb - 4, 1, 1); // heading wedge
-          }
+          ctx.fillStyle = '#ffffff';
+          if (!c.gun) ctx.fillRect(x + (c.face > 0 ? 2 : -3), yb - 4, 1, 1); // heading wedge
           if (((simT * 2) | 0) % 2 === 0) ctx.fillRect(x - 1, yb - 9, 2, 1);
           if (flash > 0 && c.gun) {                             // muzzle flash
             ctx.fillRect(x + (c.face > 0 ? 7 : -9), yb - 5, 2, 2);
