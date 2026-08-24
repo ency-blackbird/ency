@@ -380,14 +380,20 @@
     }
     // accumulate rotation from a per-frame delta → resets cleanly on replay, never jumps
     spinAngle += dt*mp.rate*mp.dir*(1-m*0.85)/state.tempo;
-    // swarm intensity: full by default; ~1 in 3 loop cycles it dips mid-tumble so a clean Möbius coalesces
+    // swarm intensity: eased, never detonated. The intro builds from calm
+    // instead of opening at full chaos, and every loop tumble breathes in and
+    // out (rising from the dissolve, settling before the reform) — at high
+    // chaos dials an instant-on swarm read as the mesh exploding.
     var effChaos=state.chaos;
-    if(state.loop && mp.showMobius && cyclePhase>HOLD+DISS && cyclePhase<HOLD+DISS+state.ambient){
+    if(tt<SPIN) effChaos*=smoother(tt/(SPIN*0.55));
+    if(state.loop && cyclePhase>HOLD+DISS && cyclePhase<HOLD+DISS+state.ambient){
       var tp=(cyclePhase-(HOLD+DISS))/state.ambient;      // 0..1 across the tumble
-      effChaos=state.chaos*(1-Math.sin(tp*3.14159)*0.92); // dips near-zero mid-drift → Möbius appears
+      effChaos*=0.35+0.65*Math.sin(tp*3.14159);
+      // ~1 in 3 cycles it dips near-zero mid-drift so a clean Möbius coalesces
+      if(mp.showMobius) effChaos*=(1-Math.sin(tp*3.14159)*0.92);
     }
-    var tilt=mp.tilt*(1-m*0.9) + Math.sin(chaosT*0.7)*0.3*state.chaos*(1-m);
-    var roll=mp.rz*(1-m*0.9)   + Math.cos(chaosT*0.9)*0.35*state.chaos*(1-m);
+    var tilt=mp.tilt*(1-m*0.9) + Math.sin(chaosT*0.7)*0.3*effChaos*(1-m);
+    var roll=mp.rz*(1-m*0.9)   + Math.cos(chaosT*0.9)*0.35*effChaos*(1-m);
     var tw = state.random ? mp.tw : state.twist;   // random mode varies the mesh per loop
     HOLO_EXP=2.0+(1.0-state.holoWide)*26.0;   // 28 = tight/rare, 2 = broad
     renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos);   // swarm scatters, then reflows into the strokes
@@ -424,15 +430,17 @@
     var mvx=mx-pmx, mvy=my-pmy; pmx=mx; pmy=my;
     var spd=Math.sqrt(mvx*mvx+mvy*mvy);
     var vBoost=Math.min(1.4, spd/26);
-    var mR=Math.min(W,H)*0.20*(1+state.freedom*0.6);
-    var mRv=mR*(1+vBoost*0.7);
+    // a small pool of grains around the pointer, not a weather system: tight
+    // base radius, modest growth from the dials and from speed
+    var mR=Math.min(W,H)*0.10*(1+state.freedom*0.35);
+    var mRv=mR*(1+vBoost*0.45);
     if(state.mouse>0 && mAmt>0.02 && spd>0){
-      var mStr=state.mouse*0.95*mAmt*(1+vBoost*0.5), cap=mR*(0.9+state.freedom*2.6), perpAmt=state.freedom*1.7;
+      var mStr=state.mouse*0.95*mAmt*(1+vBoost*0.5), cap=mR*(0.5+state.freedom*1.1), perpAmt=state.freedom*1.7;
       var ux=mvx/spd, uy=mvy/spd;
-      var ext=mRv*1.5;
+      var ext=mRv*1.3;
       var c0=Math.max(0,((mx-ext)/cellW)|0), c1=Math.min(cols-1,((mx+ext)/cellW)|0);
       var r0=Math.max(0,((my-ext)/cellH)|0), r1=Math.min(rows-1,((my+ext)/cellH)|0);
-      var aa2=mRv*mRv*2.2, bb2=mRv*mRv*0.45;   // wake ellipse: long along travel, tight across
+      var aa2=mRv*mRv*1.5, bb2=mRv*mRv*0.3;    // wake ellipse: long along travel, tight across
       for(var gy2=r0;gy2<=r1;gy2++)for(var gx2=c0;gx2<=c1;gx2++){
         var mi=gy2*cols+gx2; if(rib[mi]<=0.02) continue;
         var ax=gx2*cellW+cellW*0.5-mx, ay=gy2*cellH+cellH*0.5-my;
@@ -480,7 +488,9 @@
     // As the solid mark fades in, the mosaic fades down so no glyphs fringe
     // past the vector edge — except near the cursor, where the grains stay
     // full for the local dissolve.
-    var solidA=(m-0.96)/0.04; if(solidA<0)solidA=0; if(solidA>1)solidA=1;
+    // the solid melts across the last stretch of the morph rather than
+    // popping off in a quarter-second when a dissolve begins
+    var solidA=(m-0.85)/0.15; if(solidA<0)solidA=0; if(solidA>1)solidA=1;
     var mosDim=1-solidA*0.9;
     var holeR=mRv*1.1;
     var holeOn=solidA>0.001 && state.mouse>0 && mAmt>0.02;
