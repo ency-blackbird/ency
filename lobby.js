@@ -384,8 +384,8 @@
 
     // the action nudge — crisp DOM text floated over the map, never canvas
     var tipEl = document.createElement('div');
-    tipEl.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;' +
-      'font:9px/1 ' + MONO + ';letter-spacing:0.14em;color:rgba(212,212,212,0.92);' +
+    tipEl.style.cssText = 'position:absolute;left:0;top:0;white-space:pre;text-align:center;' +
+      'font:9px/1.7 ' + MONO + ';letter-spacing:0.14em;color:rgba(212,212,212,0.92);' +
       'text-shadow:0 1px 3px rgba(0,0,0,0.9);transform:translate(-50%,-100%);' +
       'opacity:0;transition:opacity 160ms ease;pointer-events:none;';
     panel.appendChild(tipEl);
@@ -998,7 +998,7 @@
       // then never again this visit
       var tip = null;
       var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
-      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: touch ? 'tap · hug' : 'x · hug  v · dance' };
+      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: touch ? 'tap · hug' : 'x · hug\nv · dance' };
       else if (!you.gun) {
         for (var tg = 0; tg < floorGuns.length && !tip; tg++) {
           var tfg = floorGuns[tg];
@@ -1011,7 +1011,7 @@
             tip = { k: 'take', x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
         }
       } else if (gunHintT > 0) {
-        tip = { k: 'fire', x: you.x, y: you.y - 1.2, s: touch ? 'tap · fire' : 'c · fire  z · drop' };
+        tip = { k: 'fire', x: you.x, y: you.y - 1.2, s: touch ? 'tap · fire' : 'c · fire\nz · drop' };
       }
       if (tip && !tipSeen[tip.k]) {
         tipSeen[tip.k] = true;                   // one flash, then it's yours
