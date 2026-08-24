@@ -152,9 +152,6 @@
   // the faint background field lives on its own layer, refreshed every few
   // frames — it evolves slowly, and it's most of the cells at high gran
   var bgCv=document.createElement('canvas'), bctx=bgCv.getContext('2d'), bgTick=0;
-  // the resting mark is drawn solid on its own layer, so the cursor can
-  // punch a local hole in it (revealing the grains) without touching them
-  var solidCv=document.createElement('canvas'), sctx=solidCv.getContext('2d');
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
   // the quantised diffraction colour for a cell, cached per (cell colour, level)
   function holoColorAt(idxc, lv, holo){
@@ -237,7 +234,6 @@
     cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.textBaseline='top'; ctx.textAlign='left';
     bgCv.width=W*dpr; bgCv.height=H*dpr; bctx.setTransform(dpr,0,0,dpr,0,0);
-    solidCv.width=W*dpr; solidCv.height=H*dpr; sctx.setTransform(dpr,0,0,dpr,0,0);
     bgTick=0;
     zbuf=new Float32Array(cols*rows); rib=new Float32Array(cols*rows);
     glint=new Float32Array(cols*rows);   // how hard this cell is catching the light, 3D
@@ -412,7 +408,7 @@
     // of how the ribbon is turned rather than from a clock. Quantised into
     // buckets and applied only to mark cells, so it costs a handful of
     // fillStyle changes per frame instead of one per cell.
-    var holo=state.holo, lastFill='';
+    var holo=state.holo, lastFill=state.ink;
     if(holo>0.001 && (holoCacheKey!==holo+'|'+state.ink)){
       holoCacheKey=holo+'|'+state.ink; holoCache=new Array(32768);
       var hx2=state.ink.replace('#','');
@@ -485,13 +481,14 @@
     }
 
     // ---- mark layer: every frame, sub-pixel continuous.
-    // As the solid mark fades in, the mosaic fades down so no glyphs fringe
-    // past the vector edge — except near the cursor, where the grains stay
-    // full for the local dissolve.
-    // the solid melts across the last stretch of the morph rather than
-    // popping off in a quarter-second when a dissolve begins
+    // The merge happens in the mosaic's own medium: as the morph settles,
+    // each landed cell fattens from its glyph into a full solid block, and
+    // neighbouring blocks bleed into one another until the mark is one
+    // continuous filled shape — no overlay, the grid itself fuses. The
+    // cursor melts it back into grains locally, and the per-cell ripple
+    // quiets as the shape solidifies so the fused surface doesn't crack.
     var solidA=(m-0.85)/0.15; if(solidA<0)solidA=0; if(solidA>1)solidA=1;
-    var mosDim=1-solidA*0.9;
+    var ripAmt=RIP*(1-solidA*0.85);
     var holeR=mRv*1.1;
     var holeOn=solidA>0.001 && state.mouse>0 && mAmt>0.02;
     for(var gy=0;gy<rows;gy++){
@@ -500,17 +497,14 @@
         if(ribB<=0.02) continue;
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
-        if(solidA>0.001){
-          var af=mosDim;
-          if(holeOn){
-            var hdx=hx-mx, hdy=hy-my, hdd=Math.sqrt(hdx*hdx+hdy*hdy);
-            if(hdd<holeR){ var pr=1-hdd/holeR; af+= (1-af)*Math.min(1,pr*1.6); }
-          }
-          alpha*=af;
-        }
         if(alpha<0.055) continue;
-        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*RIP*idle + dispX[idx];
-        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*RIP*0.8*idle + dispY[idx];
+        var cellSolid=solidA;
+        if(holeOn && cellSolid>0.003){
+          var hdx=hx-mx, hdy=hy-my, hdd=Math.sqrt(hdx*hdx+hdy*hdy);
+          if(hdd<holeR){ cellSolid*=Math.max(0, 1-(1-hdd/holeR)*1.6); }
+        }
+        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*ripAmt*idle + dispX[idx];
+        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*ripAmt*0.8*idle + dispY[idx];
         var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
@@ -530,7 +524,15 @@
             tinted=true;
           }
         }
-        ctx.globalAlpha=alpha>1?1:alpha;
+        // the block: a full cell rect, bled a hair past its bounds so
+        // neighbouring blocks fuse into one continuous surface
+        if(cellSolid>0.003){
+          if(!tinted && lastFill!==state.ink){ ctx.fillStyle=state.ink; lastFill=state.ink; }
+          ctx.globalAlpha=(alpha>1?1:alpha)*cellSolid;
+          ctx.fillRect(dx-0.4, dy-0.4, cellW+0.8, cellH+0.8);
+        }
+        if(cellSolid>=0.997) continue;           // fully fused — no glyph left to draw
+        ctx.globalAlpha=(alpha>1?1:alpha)*(1-cellSolid*0.9);
         if(tinted){
           if(sb!==fontB){ ctx.font=atlasFonts[sb]; fontB=sb; }
           var tox=atlasOX[sb]+2, toy=atlasOY[sb]+2;   // centre the scaled glyph like the stamps
@@ -553,32 +555,6 @@
         }
         else { var tile=atlas[sb][ci]; if(tile) ctx.drawImage(tile, dx+atlasOX[sb], dy+atlasOY[sb], atlasTW[sb], atlasTH[sb]); }
       }
-    }
-    // ---- the merge: as the morph settles, the mosaic crossfades into the
-    // original vector mark — the block seams go, and what rests is the drawn
-    // logo itself, floating on the same idle offsets. The cursor punches a
-    // soft local hole in the solid, dissolving it back into its grains.
-    if(solidA>0.001 && logoPath){
-      sctx.clearRect(0,0,W,H);
-      sctx.fillStyle=state.ink;
-      sctx.save();
-      sctx.translate(fitX+driftX, fitY+bobY);
-      sctx.scale(fitS,fitS);
-      sctx.fill(logoPath,'evenodd');
-      sctx.restore();
-      if(state.mouse>0 && mAmt>0.02){
-        var hr=mRv*1.1;
-        var grad=sctx.createRadialGradient(mx,my,0,mx,my,hr);
-        grad.addColorStop(0,'rgba(0,0,0,1)');
-        grad.addColorStop(0.55,'rgba(0,0,0,0.85)');
-        grad.addColorStop(1,'rgba(0,0,0,0)');
-        sctx.globalCompositeOperation='destination-out';
-        sctx.fillStyle=grad;
-        sctx.beginPath(); sctx.arc(mx,my,hr,0,7); sctx.fill();
-        sctx.globalCompositeOperation='source-over';
-      }
-      ctx.globalAlpha=solidA;
-      ctx.drawImage(solidCv,0,0,W,H);
     }
     ctx.globalAlpha=1;
     raf=requestAnimationFrame(frame);
