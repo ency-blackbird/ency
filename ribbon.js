@@ -168,36 +168,30 @@
   }
 
   // plain-ink glyphs are stamped from prebaked tiles instead of fillText —
-  // holo-tinted cells (a handful per frame) keep the live text path.
-  // Three sizes per glyph: shards nearer the camera stamp a step larger,
-  // farther a step smaller — quantised so the grid feel survives.
-  var ATLAS_SCALES=[0.86, 1, 1.16];   // far, base, near — gentle, so depth never reads as blur
-  var atlas=null, atlasKey='', atlasTW=null, atlasTH=null, atlasOX=null, atlasOY=null, atlasFonts=null;
+  // holo-tinted cells (a handful per frame) keep the live text path. Drawn
+  // at fractional coordinates the tiles get bilinear sub-pixel placement, so
+  // the idle motion stays smooth. One size only: uniform, nothing pops.
+  var atlas=null, atlasKey='', atlasTW=0, atlasTH=0;
   function buildAtlas(){
     var ramp=RAMPS[state.charset];
     var key=state.charset+'|'+state.ink+'|'+cellH.toFixed(2)+'|'+dpr;
     if(key===atlasKey&&atlas) return;
-    atlasKey=key; atlas=[]; atlasTW=[]; atlasTH=[]; atlasOX=[]; atlasOY=[]; atlasFonts=[];
-    for(var s=0;s<ATLAS_SCALES.length;s++){
-      var sc=ATLAS_SCALES[s], tiles=[];
-      var tw=Math.ceil(cellW*sc)+4, th=Math.ceil(cellH*sc)+4;
-      var font='700 '+(cellH*0.92*sc)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
-      for(var i=0;i<ramp.length;i++){
-        var ch=ramp.charAt(i);
-        if(ch===' '){ tiles.push(null); continue; }
-        var c=document.createElement('canvas');
-        c.width=tw*dpr; c.height=th*dpr;
-        var g=c.getContext('2d');
-        g.setTransform(dpr,0,0,dpr,0,0);
-        g.font=font;
-        g.textBaseline='top'; g.textAlign='left';
-        g.fillStyle=state.ink;
-        g.fillText(ch,2,2);
-        tiles.push(c);
-      }
-      atlas.push(tiles); atlasTW.push(tw); atlasTH.push(th);
-      atlasOX.push(cellW*(1-sc)/2-2); atlasOY.push(cellH*(1-sc)/2-2);  // keeps every size centred on its cell
-      atlasFonts.push(font);
+    atlasKey=key; atlas=[];
+    atlasTW=Math.ceil(cellW*1.1)+4; atlasTH=Math.ceil(cellH*1.1)+4;
+    for(var i=0;i<ramp.length;i++){
+      var ch=ramp.charAt(i);
+      if(ch===' '){ atlas.push(null); continue; }
+      var c=document.createElement('canvas');
+      c.width=atlasTW*dpr; c.height=atlasTH*dpr;
+      var g=c.getContext('2d');
+      g.setTransform(dpr,0,0,dpr,0,0);
+      // a hair over cell height, so landed blocks touch and the resting
+      // mark reads as one merged silhouette
+      g.font='700 '+(cellH*1.02)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
+      g.textBaseline='top'; g.textAlign='left';
+      g.fillStyle=state.ink;
+      g.fillText(ch,2,2);
+      atlas.push(c);
     }
   }
   var TX,TY,TF,TW,TN=0, originX=0, originY=0;  // targets + seed-stagger + write-order stagger + origin point
@@ -346,7 +340,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,solidEase=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -389,7 +383,7 @@
       // by 65% in a single frame, which read as the loop jumping.
       var span=DISS+state.ambient+REF;
       var tp2=(cyclePhase-HOLD)/span;
-      if(tp2>0&&tp2<1) effChaos*=0.35+0.65*Math.sin(tp2*3.14159);
+      if(tp2>0&&tp2<1) effChaos*=0.65+0.35*Math.sin(tp2*3.14159);   // a light breath, most of the range kept
       // ~1 in 3 cycles it dips near-zero mid-drift so a clean Möbius coalesces
       if(mp.showMobius && cyclePhase>HOLD+DISS && cyclePhase<HOLD+DISS+state.ambient){
         var tpm=(cyclePhase-(HOLD+DISS))/state.ambient;
@@ -408,8 +402,9 @@
     // screen breathing when the canvas is fullscreen rather than a small card.
     var bgFade=1-m*0.6*state.recede;
     ctx.clearRect(0,0,W,H);
-    ctx.font=atlasFonts[1];
-    var fontB=1;   // which size the live-text path currently has set
+    // a hair over cell height: landed blocks touch, so the resting mark is
+    // one silhouette — in motion the overlap is invisible
+    ctx.font='700 '+(cellH*1.02)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
     ctx.fillStyle=state.ink;
     // ---- holo: holodisc's grating equation, applied to the mark's characters.
     // The surface-vs-half-vector term becomes a wavelength, so colour comes out
@@ -477,9 +472,9 @@
             if(bAlpha<0.055) continue;
             var bVal=fluid*0.72; if(bVal>1)bVal=1;
             var bci=Math.round(bVal*RL); if(bci<0)bci=0; if(bci>RL)bci=RL;
-            var btile=atlas[1][bci]; if(!btile) continue;
+            var btile=atlas[bci]; if(!btile) continue;
             bctx.globalAlpha=bAlpha;
-            bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW[1], atlasTH[1]);
+            bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW, atlasTH);
           }
         }
         bctx.globalAlpha=1;
@@ -488,28 +483,12 @@
       ctx.drawImage(bgCv, 0, 0, W, H);
     }
 
-    // ---- mark layer: every frame, sub-pixel continuous.
-    // The merge happens in the mosaic's own medium: each landed cell fattens
-    // from its glyph into a full solid block, and neighbouring blocks bleed
-    // into one another until the mark is one continuous filled shape — no
-    // overlay, the grid itself fuses.
-    //
-    // The fuse runs on its OWN clock, not on the morph: glyphs land fully
-    // first (the formation is untouched), then the weld happens as its own
-    // quiet beat about a second later — and on dissolve it melts back to
-    // glyphs quickly, before anything has moved, so fused chunks never fly.
-    var sTarget = m>0.995 ? 1 : 0;
-    if(reduce) solidEase=sTarget;
-    solidEase += (sTarget-solidEase)*Math.min(1, dt*(sTarget?1.3:2.6));
-    var solidA = solidEase<0.012 ? 0 : solidEase>0.988 ? 1 : solidEase;
-    // per-cell ripple quiets only once truly fused, so the bend texture
-    // stays alive through the whole formation
-    var ripAmt=RIP*(1-solidA*0.85);
-    // the weld spreads cell by cell (each on its own hashed beat) instead of
-    // the whole mark crossfading in lockstep — crystallising, not snapping
-    var weldLo=solidA*1.45;
-    var holeR=mRv*1.1;
-    var holeOn=solidA>0.001 && state.mouse>0 && mAmt>0.02;
+    // ---- mark layer: every frame, live text at true sub-pixel positions —
+    // the original renderer. The seams between landed blocks are closed by
+    // the font itself (a hair over cell height), so the resting mark reads
+    // as one merged silhouette while every cell keeps its idle ripple. No
+    // weld state, no depth buckets, nothing to snap: what forms is what
+    // rests, and what rests is still alive.
     for(var gy=0;gy<rows;gy++){
       for(var gx=0;gx<cols;gx++){
         var idx=gy*cols+gx, ribB=rib[idx];
@@ -517,23 +496,11 @@
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
         if(alpha<0.055) continue;
-        var cellSolid=weldLo - h(gx,gy)*0.45;
-        cellSolid = cellSolid<0?0:cellSolid>1?1:cellSolid;
-        if(holeOn && cellSolid>0.003){
-          var hdx=hx-mx, hdy=hy-my, hdd=Math.sqrt(hdx*hdx+hdy*hdy);
-          if(hdd<holeR){ cellSolid*=Math.max(0, 1-(1-hdd/holeR)*1.6); }
-        }
-        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*ripAmt*idle + dispX[idx];
-        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*ripAmt*0.8*idle + dispY[idx];
+        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*RIP*idle + dispX[idx];
+        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*RIP*0.8*idle + dispY[idx];
         var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
-        // depth in three steps: zbuf still holds this cell's z from the
-        // rasteriser — nearer shards stamp a size larger, farther smaller.
-        // Formed, every z converges to the focal plane, so the mark is uniform.
-        var zc=zbuf[idx], sb=1;
-        if(zc<3.25) sb=2; else if(zc>4.15) sb=0;
-
         var tinted=false, lv=0;
         if(holo>0.001){
           var amt=holo*glint[idx];
@@ -542,21 +509,12 @@
             var cc=holoColorAt(idx, lv, holo);
             if(cc!==lastFill){ ctx.fillStyle=cc; lastFill=cc; }
             tinted=true;
-          }
+          } else if(lastFill!==state.ink){ ctx.fillStyle=state.ink; lastFill=state.ink; }
         }
-        // the block: a full cell rect, bled a hair past its bounds so
-        // neighbouring blocks fuse into one continuous surface
-        if(cellSolid>0.003){
-          if(!tinted && lastFill!==state.ink){ ctx.fillStyle=state.ink; lastFill=state.ink; }
-          ctx.globalAlpha=(alpha>1?1:alpha)*cellSolid;
-          ctx.fillRect(dx-0.4, dy-0.4, cellW+0.8, cellH+0.8);
-        }
-        if(cellSolid>=0.997) continue;           // fully fused — no glyph left to draw
-        ctx.globalAlpha=(alpha>1?1:alpha)*(1-cellSolid*0.9);
+        ctx.globalAlpha=alpha>1?1:alpha;
+        if(tinted) ctx.fillText(ch, dx, dy);
+        else { var tile=atlas[ci]; if(tile) ctx.drawImage(tile, dx-2, dy-2, atlasTW, atlasTH); }
         if(tinted){
-          if(sb!==fontB){ ctx.font=atlasFonts[sb]; fontB=sb; }
-          var tox=atlasOX[sb]+2, toy=atlasOY[sb]+2;   // centre the scaled glyph like the stamps
-          ctx.fillText(ch, dx+tox, dy+toy);
           // reflection cloning: a grating repeats the catch one diffraction
           // order out on either side, dispersed by the field where the clone
           // lands — so each glint reads as a specular with two rainbow ghosts
@@ -568,12 +526,11 @@
               var gxg=gx+ogx*od, gyg=gy+ogy*od;
               if(gxg<0||gxg>=cols||gyg<0||gyg>=rows) continue;
               ctx.fillStyle=holoColorAt(gyg*cols+gxg, lv, holo);
-              ctx.fillText(ch, dx+tox+ogx*od*cellW, dy+toy+ogy*od*cellH);
+              ctx.fillText(ch, dx+ogx*od*cellW, dy+ogy*od*cellH);
             }
             lastFill='';
           }
         }
-        else { var tile=atlas[sb][ci]; if(tile) ctx.drawImage(tile, dx+atlasOX[sb], dy+atlasOY[sb], atlasTW[sb], atlasTH[sb]); }
       }
     }
     ctx.globalAlpha=1;
