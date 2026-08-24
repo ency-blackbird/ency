@@ -435,14 +435,6 @@
       { x: 22.45, y: 7.5, side: -1, type: 'fog',      taken: false },
     ];
 
-    // confetti is the one place the full spectrum fires — straight off the
-    // same wavelength ramp as everything else
-    var CONF = [];
-    for (var cw = 400; cw <= 680; cw += 40) {
-      var cc = wl2rgb(cw);
-      CONF.push('rgb(' + ((cc[0] * 255) | 0) + ',' + ((cc[1] * 255) | 0) + ',' + ((cc[2] * 255) | 0) + ')');
-    }
-
     function npcArmed() {
       var n = 0;
       for (var i = 1; i < chars.length; i++) if (chars[i].gun) n++;
@@ -524,7 +516,7 @@
           vx: dir * Math.cos(a) * sp,
           vy: Math.sin(a) * sp,
           t: 0, life: rand(0.8, 1.5),
-          c: CONF[(Math.random() * CONF.length) | 0],
+          ph: rand(0, 6.28),      // each fleck rides the diffraction field at its own phase
         });
       }
       var bx2 = sh.x - dir * 0.18;                 // recoil
@@ -908,7 +900,7 @@
 
     function draw() {
       var iw = W * S, ih = H * S, gx, gy;
-      ctx.fillStyle = '#161616'; ctx.fillRect(0, 0, iw, ih);   // the void
+      ctx.fillStyle = '#0f0f0f'; ctx.fillRect(0, 0, iw, ih);   // the void, deeper than the floor
 
       // the carved floor, then a wall band wherever floor meets void
       ctx.fillStyle = '#202020';
@@ -1024,10 +1016,11 @@
       }
       tipEl.style.opacity = tipFlashT > 0 ? '1' : '0';
 
-      // confetti — the only full-spectrum moment in the room
+      // confetti — foil, not crayon: every fleck samples the same desaturated
+      // diffraction field as the rest of the site, shimmering as it tumbles
       for (var pc = 0; pc < confetti.length; pc++) {
         var pp = confetti[pc];
-        ctx.fillStyle = pp.c;
+        ctx.fillStyle = holoCss(pp.x / W, pp.y / H, simT * 2 + pp.ph, 1);
         ctx.globalAlpha = Math.min(1, (pp.life - pp.t) / 0.3);
         if (((pp.t * 16) | 0) % 2) ctx.fillRect((pp.x * S) | 0, (pp.y * S) | 0, 2, 1);
         else ctx.fillRect((pp.x * S) | 0, (pp.y * S) | 0, 1, 2);
