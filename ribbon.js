@@ -382,11 +382,19 @@
     // chaos dials an instant-on swarm read as the mesh exploding.
     var effChaos=state.chaos;
     if(tt<SPIN) effChaos*=smoother(tt/(SPIN*0.55));
-    if(state.loop && cyclePhase>HOLD+DISS && cyclePhase<HOLD+DISS+state.ambient){
-      var tp=(cyclePhase-(HOLD+DISS))/state.ambient;      // 0..1 across the tumble
-      effChaos*=0.35+0.65*Math.sin(tp*3.14159);
+    if(state.loop && loopStarted && cyclePhase>HOLD){
+      // one breath across the whole dissolve→drift→reform span. At the span's
+      // edges the mark is formed (chaos is inert there), so the envelope is
+      // continuous — a window that opened mid-motion used to step the chaos
+      // by 65% in a single frame, which read as the loop jumping.
+      var span=DISS+state.ambient+REF;
+      var tp2=(cyclePhase-HOLD)/span;
+      if(tp2>0&&tp2<1) effChaos*=0.35+0.65*Math.sin(tp2*3.14159);
       // ~1 in 3 cycles it dips near-zero mid-drift so a clean Möbius coalesces
-      if(mp.showMobius) effChaos*=(1-Math.sin(tp*3.14159)*0.92);
+      if(mp.showMobius && cyclePhase>HOLD+DISS && cyclePhase<HOLD+DISS+state.ambient){
+        var tpm=(cyclePhase-(HOLD+DISS))/state.ambient;
+        effChaos*=(1-Math.sin(tpm*3.14159)*0.92);
+      }
     }
     var tilt=mp.tilt*(1-m*0.9) + Math.sin(chaosT*0.7)*0.3*effChaos*(1-m);
     var roll=mp.rz*(1-m*0.9)   + Math.cos(chaosT*0.9)*0.35*effChaos*(1-m);
@@ -492,11 +500,14 @@
     // glyphs quickly, before anything has moved, so fused chunks never fly.
     var sTarget = m>0.995 ? 1 : 0;
     if(reduce) solidEase=sTarget;
-    solidEase += (sTarget-solidEase)*Math.min(1, dt*(sTarget?1.6:4.5));
+    solidEase += (sTarget-solidEase)*Math.min(1, dt*(sTarget?1.3:2.6));
     var solidA = solidEase<0.012 ? 0 : solidEase>0.988 ? 1 : solidEase;
     // per-cell ripple quiets only once truly fused, so the bend texture
     // stays alive through the whole formation
     var ripAmt=RIP*(1-solidA*0.85);
+    // the weld spreads cell by cell (each on its own hashed beat) instead of
+    // the whole mark crossfading in lockstep — crystallising, not snapping
+    var weldLo=solidA*1.45;
     var holeR=mRv*1.1;
     var holeOn=solidA>0.001 && state.mouse>0 && mAmt>0.02;
     for(var gy=0;gy<rows;gy++){
@@ -506,7 +517,8 @@
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
         if(alpha<0.055) continue;
-        var cellSolid=solidA;
+        var cellSolid=weldLo - h(gx,gy)*0.45;
+        cellSolid = cellSolid<0?0:cellSolid>1?1:cellSolid;
         if(holeOn && cellSolid>0.003){
           var hdx=hx-mx, hdy=hy-my, hdd=Math.sqrt(hdx*hdx+hdy*hdy);
           if(hdd<holeR){ cellSolid*=Math.max(0, 1-(1-hdd/holeR)*1.6); }
