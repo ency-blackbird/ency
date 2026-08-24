@@ -370,13 +370,13 @@
     fx.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
     panel.insertBefore(fx, plate);
     var fctx = fx.getContext('2d');
-    var fscale = 1;
+    var fscale = 1, fxDpr = 0;
     function sizeFx() {
       var fr = panel.getBoundingClientRect();
       if (!fr.width) { requestAnimationFrame(sizeFx); return; }
-      var dpr = Math.min(devicePixelRatio || 1, 2);
-      fx.width = fr.width * dpr; fx.height = fr.height * dpr;
-      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fxDpr = Math.min(devicePixelRatio || 1, 2);
+      fx.width = fr.width * fxDpr; fx.height = fr.height * fxDpr;
+      fctx.setTransform(fxDpr, 0, 0, fxDpr, 0, 0);
       fscale = fr.width / (W * S);       // world-pixel → css-pixel
     }
     sizeFx();
@@ -1112,6 +1112,8 @@
 
     function frame(now) {
       if (!alive) return;
+      // displays and zoom can change dpr without a resize event
+      if (Math.min(devicePixelRatio || 1, 2) !== fxDpr) sizeFx();
       var dt = Math.min(0.05, (now - last) / 1000); last = now;
       step(dt);
       draw();

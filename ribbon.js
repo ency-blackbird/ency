@@ -25,7 +25,7 @@
     twist: 1, charset: 'ascii', tempo: 1, loop: true, random: false,
     gran: 130, float: 1, bend: 1, trail: 0.35, gather: 0, reveal: 'auto',
     ambient: 1.5, chaos: 1.2, mouse: 0.5, freedom: 0.4,
-    scale: 1, holo: 0, holoWide: 0.35, recede: 1, ink: '#c0c0c0', paper: '#232323'
+    scale: 1, holo: 0, holoWide: 0.35, recede: 1, field: 0, ink: '#c0c0c0', paper: '#232323'
   };
 
   var KEYS = Object.keys(DEFAULTS);
@@ -153,6 +153,20 @@
   // frames — it evolves slowly, and it's most of the cells at high gran
   var bgCv=document.createElement('canvas'), bctx=bgCv.getContext('2d'), bgTick=0;
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
+  // the quantised diffraction colour for a cell, cached per (cell colour, level)
+  function holoColorAt(idxc, lv, holo){
+    var key=(holoIdx[idxc]<<3)|lv, cc=holoCache[key];
+    if(cc===undefined){
+      var q=holoIdx[idxc], a=(lv+0.5)/8*holo;
+      var fr=((q>>8)&15)/15*255, fg=((q>>4)&15)/15*255, fb=(q&15)/15*255;
+      cc='rgb('+((cacheInk[0]+(fr-cacheInk[0])*a)|0)+','
+               +((cacheInk[1]+(fg-cacheInk[1])*a)|0)+','
+               +((cacheInk[2]+(fb-cacheInk[2])*a)|0)+')';
+      holoCache[key]=cc;
+    }
+    return cc;
+  }
+
   // plain-ink glyphs are stamped from prebaked tiles instead of fillText —
   // holo-tinted cells (a handful per frame) keep the live text path
   var atlas=null, atlasKey='', atlasTW=0, atlasTH=0;
@@ -330,6 +344,10 @@
   function frame(now){
     if(!running) return;
     if(pace>1){ paceTick=(paceTick+1)%pace; if(paceTick){ raf=requestAnimationFrame(frame); return; } }
+    // dpr can change with NO resize event (window dragged between displays,
+    // zoom) — the stale transform blows the drawing out past the bottom-right
+    // corner until something rebuilds. Watch for it and rebuild ourselves.
+    if(Math.min(2,window.devicePixelRatio||1)!==dpr) build();
     var dt=(now-lastNow)/1000; lastNow=now; if(dt<0)dt=0; if(dt>0.05)dt=0.05;
     idlePhase += dt*state.float/state.tempo;   // hover/ripple clock — Tempo scales it (master speed)
     chaosT += dt/state.tempo*0.8;              // swarm drift clock
@@ -402,30 +420,33 @@
     for(var di=0;di<dispX.length;di++){ dispX[di]*=dcy; dispY[di]*=dcy; }
     var bobY=(Math.sin(idlePhase*1.5)+Math.sin(idlePhase*0.95+1.3)*0.4)*(H*0.022)*idle;
     var driftX=(Math.sin(idlePhase*0.85)+Math.cos(idlePhase*1.4)*0.35)*(W*0.007)*idle;
-    // ---- background layer: every 3rd rendered frame, into its own canvas.
-    // The field drifts slowly (flowT 0.35/s) and sits under 0.21 alpha, so a
-    // 3-frame refresh is invisible — and it's ~90% of the cells at high gran.
-    if(bgTick%3===0){
-      bctx.clearRect(0,0,W,H);
-      bctx.globalAlpha=1;
-      for(var by=0;by<rows;by++){
-        for(var bx2=0;bx2<cols;bx2++){
-          var bidx=by*cols+bx2;
-          if(rib[bidx]>0.02) continue;                 // mark cells live on the top layer
-          var fluid=fbm(bx2*0.11+flowT*0.4, by*0.14 - flowT*0.2);
-          var bAlpha=(0.10+fluid*0.42)*0.4*bgFade;
-          if(bAlpha<0.055) continue;
-          var bVal=fluid*0.72; if(bVal>1)bVal=1;
-          var bci=Math.round(bVal*RL); if(bci<0)bci=0; if(bci>RL)bci=RL;
-          var btile=atlas[bci]; if(!btile) continue;
-          bctx.globalAlpha=bAlpha;
-          bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW, atlasTH);
+    // ---- background layer: the faint glyph clouds, off by default now —
+    // the paper stays one clean color unless the `field` dial brings them
+    // back. When on: refreshed every 3rd frame into its own canvas (the
+    // field drifts slowly, and it's ~90% of the cells at high gran).
+    if(state.field>0.001){
+      if(bgTick%3===0){
+        bctx.clearRect(0,0,W,H);
+        bctx.globalAlpha=1;
+        for(var by=0;by<rows;by++){
+          for(var bx2=0;bx2<cols;bx2++){
+            var bidx=by*cols+bx2;
+            if(rib[bidx]>0.02) continue;                 // mark cells live on the top layer
+            var fluid=fbm(bx2*0.11+flowT*0.4, by*0.14 - flowT*0.2);
+            var bAlpha=(0.10+fluid*0.42)*0.4*bgFade*state.field;
+            if(bAlpha<0.055) continue;
+            var bVal=fluid*0.72; if(bVal>1)bVal=1;
+            var bci=Math.round(bVal*RL); if(bci<0)bci=0; if(bci>RL)bci=RL;
+            var btile=atlas[bci]; if(!btile) continue;
+            bctx.globalAlpha=bAlpha;
+            bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW, atlasTH);
+          }
         }
+        bctx.globalAlpha=1;
       }
-      bctx.globalAlpha=1;
+      bgTick++;
+      ctx.drawImage(bgCv, 0, 0, W, H);
     }
-    bgTick++;
-    ctx.drawImage(bgCv, 0, 0, W, H);
 
     // ---- mark layer: every frame, sub-pixel continuous
     for(var gy=0;gy<rows;gy++){
@@ -440,26 +461,35 @@
         var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
-        var tinted=false;
+        var tinted=false, lv=0;
         if(holo>0.001){
           var amt=holo*glint[idx];
           if(amt>0.012){
-            var lv=(amt*7.999/holo)|0;            // 8 strength steps, so the cache stays small
-            var key=(holoIdx[idx]<<3)|lv, cc=holoCache[key];
-            if(cc===undefined){
-              var q=holoIdx[idx], a=(lv+0.5)/8*holo;
-              var fr=((q>>8)&15)/15*255, fg=((q>>4)&15)/15*255, fb=(q&15)/15*255;
-              cc='rgb('+((cacheInk[0]+(fr-cacheInk[0])*a)|0)+','
-                       +((cacheInk[1]+(fg-cacheInk[1])*a)|0)+','
-                       +((cacheInk[2]+(fb-cacheInk[2])*a)|0)+')';
-              holoCache[key]=cc;
-            }
+            lv=(amt*7.999/holo)|0;                // 8 strength steps, so the cache stays small
+            var cc=holoColorAt(idx, lv, holo);
             if(cc!==lastFill){ ctx.fillStyle=cc; lastFill=cc; }
             tinted=true;
           }
         }
         ctx.globalAlpha=alpha>1?1:alpha;
-        if(tinted) ctx.fillText(ch, dx, dy);
+        if(tinted){
+          ctx.fillText(ch, dx, dy);
+          // reflection cloning: a grating repeats the catch one diffraction
+          // order out on either side, dispersed by the field where the clone
+          // lands — so each glint reads as a specular with two rainbow ghosts
+          var rxu=hx-cx, ryu=hy-cy, rl=Math.sqrt(rxu*rxu+ryu*ryu)||1;
+          var ogx=Math.round(rxu/rl*2.2), ogy=Math.round(ryu/rl*2.2);
+          if(ogx||ogy){
+            ctx.globalAlpha*=0.38;
+            for(var od=-1;od<=1;od+=2){
+              var gxg=gx+ogx*od, gyg=gy+ogy*od;
+              if(gxg<0||gxg>=cols||gyg<0||gyg>=rows) continue;
+              ctx.fillStyle=holoColorAt(gyg*cols+gxg, lv, holo);
+              ctx.fillText(ch, dx+ogx*od*cellW, dy+ogy*od*cellH);
+            }
+            lastFill='';
+          }
+        }
         else { var tile=atlas[ci]; if(tile) ctx.drawImage(tile, dx-2, dy-2, atlasTW, atlasTH); }
       }
     }
