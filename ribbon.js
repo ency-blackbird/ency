@@ -168,26 +168,36 @@
   }
 
   // plain-ink glyphs are stamped from prebaked tiles instead of fillText —
-  // holo-tinted cells (a handful per frame) keep the live text path
-  var atlas=null, atlasKey='', atlasTW=0, atlasTH=0;
+  // holo-tinted cells (a handful per frame) keep the live text path.
+  // Three sizes per glyph: shards nearer the camera stamp a step larger,
+  // farther a step smaller — quantised so the grid feel survives.
+  var ATLAS_SCALES=[0.78, 1, 1.24];   // far, base, near
+  var atlas=null, atlasKey='', atlasTW=null, atlasTH=null, atlasOX=null, atlasOY=null, atlasFonts=null;
   function buildAtlas(){
     var ramp=RAMPS[state.charset];
     var key=state.charset+'|'+state.ink+'|'+cellH.toFixed(2)+'|'+dpr;
     if(key===atlasKey&&atlas) return;
-    atlasKey=key; atlas=[];
-    atlasTW=Math.ceil(cellW)+4; atlasTH=Math.ceil(cellH)+4;
-    for(var i=0;i<ramp.length;i++){
-      var ch=ramp.charAt(i);
-      if(ch===' '){ atlas.push(null); continue; }
-      var c=document.createElement('canvas');
-      c.width=atlasTW*dpr; c.height=atlasTH*dpr;
-      var g=c.getContext('2d');
-      g.setTransform(dpr,0,0,dpr,0,0);
-      g.font='700 '+(cellH*0.92)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
-      g.textBaseline='top'; g.textAlign='left';
-      g.fillStyle=state.ink;
-      g.fillText(ch,2,2);
-      atlas.push(c);
+    atlasKey=key; atlas=[]; atlasTW=[]; atlasTH=[]; atlasOX=[]; atlasOY=[]; atlasFonts=[];
+    for(var s=0;s<ATLAS_SCALES.length;s++){
+      var sc=ATLAS_SCALES[s], tiles=[];
+      var tw=Math.ceil(cellW*sc)+4, th=Math.ceil(cellH*sc)+4;
+      var font='700 '+(cellH*0.92*sc)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
+      for(var i=0;i<ramp.length;i++){
+        var ch=ramp.charAt(i);
+        if(ch===' '){ tiles.push(null); continue; }
+        var c=document.createElement('canvas');
+        c.width=tw*dpr; c.height=th*dpr;
+        var g=c.getContext('2d');
+        g.setTransform(dpr,0,0,dpr,0,0);
+        g.font=font;
+        g.textBaseline='top'; g.textAlign='left';
+        g.fillStyle=state.ink;
+        g.fillText(ch,2,2);
+        tiles.push(c);
+      }
+      atlas.push(tiles); atlasTW.push(tw); atlasTH.push(th);
+      atlasOX.push(cellW*(1-sc)/2-2); atlasOY.push(cellH*(1-sc)/2-2);  // keeps every size centred on its cell
+      atlasFonts.push(font);
     }
   }
   var TX,TY,TF,TW,TN=0, originX=0, originY=0;  // targets + seed-stagger + write-order stagger + origin point
@@ -383,7 +393,8 @@
     // screen breathing when the canvas is fullscreen rather than a small card.
     var bgFade=1-m*0.6*state.recede;
     ctx.clearRect(0,0,W,H);
-    ctx.font='700 '+(cellH*0.92)+'px "SF Mono", ui-monospace, Menlo, Consolas, monospace';
+    ctx.font=atlasFonts[1];
+    var fontB=1;   // which size the live-text path currently has set
     ctx.fillStyle=state.ink;
     // ---- holo: holodisc's grating equation, applied to the mark's characters.
     // The surface-vs-half-vector term becomes a wavelength, so colour comes out
@@ -437,9 +448,9 @@
             if(bAlpha<0.055) continue;
             var bVal=fluid*0.72; if(bVal>1)bVal=1;
             var bci=Math.round(bVal*RL); if(bci<0)bci=0; if(bci>RL)bci=RL;
-            var btile=atlas[bci]; if(!btile) continue;
+            var btile=atlas[1][bci]; if(!btile) continue;
             bctx.globalAlpha=bAlpha;
-            bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW, atlasTH);
+            bctx.drawImage(btile, bx2*cellW-2, by*cellH-2, atlasTW[1], atlasTH[1]);
           }
         }
         bctx.globalAlpha=1;
@@ -461,6 +472,12 @@
         var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
+        // depth in three steps: zbuf still holds this cell's z from the
+        // rasteriser — nearer shards stamp a size larger, farther smaller.
+        // Formed, every z converges to the focal plane, so the mark is uniform.
+        var zc=zbuf[idx], sb=1;
+        if(zc<3.25) sb=2; else if(zc>4.15) sb=0;
+
         var tinted=false, lv=0;
         if(holo>0.001){
           var amt=holo*glint[idx];
@@ -473,7 +490,9 @@
         }
         ctx.globalAlpha=alpha>1?1:alpha;
         if(tinted){
-          ctx.fillText(ch, dx, dy);
+          if(sb!==fontB){ ctx.font=atlasFonts[sb]; fontB=sb; }
+          var tox=atlasOX[sb]+2, toy=atlasOY[sb]+2;   // centre the scaled glyph like the stamps
+          ctx.fillText(ch, dx+tox, dy+toy);
           // reflection cloning: a grating repeats the catch one diffraction
           // order out on either side, dispersed by the field where the clone
           // lands — so each glint reads as a specular with two rainbow ghosts
@@ -485,12 +504,12 @@
               var gxg=gx+ogx*od, gyg=gy+ogy*od;
               if(gxg<0||gxg>=cols||gyg<0||gyg>=rows) continue;
               ctx.fillStyle=holoColorAt(gyg*cols+gxg, lv, holo);
-              ctx.fillText(ch, dx+ogx*od*cellW, dy+ogy*od*cellH);
+              ctx.fillText(ch, dx+tox+ogx*od*cellW, dy+toy+ogy*od*cellH);
             }
             lastFill='';
           }
         }
-        else { var tile=atlas[ci]; if(tile) ctx.drawImage(tile, dx-2, dy-2, atlasTW, atlasTH); }
+        else { var tile=atlas[sb][ci]; if(tile) ctx.drawImage(tile, dx+atlasOX[sb], dy+atlasOY[sb], atlasTW[sb], atlasTH[sb]); }
       }
     }
     ctx.globalAlpha=1;
