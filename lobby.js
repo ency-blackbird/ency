@@ -412,7 +412,7 @@
     chars.push(you);
 
     var count = Math.max(1, opts.count | 0);
-    var rings = [], floats = [], glints = [];
+    var floats = [], glints = [];
 
     // ---- hugs and muskets
     var hearts = [], confetti = [];
@@ -478,6 +478,12 @@
       if (!walkable(gx, gy)) { gx = you.x; gy = you.y; }
       floorGuns.push({ x: gx, y: gy, type: you.gun });
       you.gun = null; gunHintT = 0;
+    }
+
+    function tryDance() {
+      if (you.busy > 0) return;
+      you.dance = 1.8;
+      you.tx = you.x; you.ty = you.y; you.wp = [];   // feet planted
     }
 
     function tryGun() {
@@ -610,7 +616,6 @@
         c.pause = 1.4;
         chars.push(c);
         if (celebrate && count > prev) {
-          rings.push({ x: x, y: y, t: 0 });
           floats.push({ x: x, y: y - 1.2, t: 0 });
         }
       }
@@ -628,6 +633,7 @@
       } else if (k === 'x') { tryHug(); e.preventDefault(); }
       else if (k === 'c') { tryGun(); e.preventDefault(); }
       else if (k === 'z') { tryDrop(); e.preventDefault(); }
+      else if (k === 'v') { tryDance(); e.preventDefault(); }
     }
     function onKeyUp(e) { keys[e.key.toLowerCase()] = false; }
     addEventListener('keydown', onKeyDown);
@@ -648,6 +654,7 @@
               Math.hypot(rk.x - you.x, rk.y - you.y) < 1.8) { tryGun(); return; }
         }
       } else if (Math.hypot(you.x - tx, you.y - ty) < 1) { tryGun(); return; }
+      if (!you.gun && Math.hypot(you.x - tx, you.y - ty) < 1) { tryDance(); return; }   // tap yourself: dance
 
       if (!walkable(tx, ty)) {           // tapped a wall or the void → nearest floor
         var best = null, bd = 1e9;
@@ -729,6 +736,21 @@
       if (keys['arrowright'] || keys['d']) vx += 1;
       if (keys['arrowup'] || keys['w']) vy -= 1;
       if (keys['arrowdown'] || keys['s']) vy += 1;
+      // your dance: feet planted, face flipping to the beat — and it's
+      // contagious: anyone within arm's reach joins in
+      if (you.dance > 0) {
+        you.dance -= dt;
+        you.face = ((simT * 6) | 0) % 2 ? 1 : -1;
+        if (vx || vy) you.dance = 0;               // moving breaks the move
+        for (var dn = 1; dn < chars.length; dn++) {
+          var dc = chars[dn];
+          if (dc.busy > 0 || dc.dance > 0) continue;
+          if (Math.hypot(dc.x - you.x, dc.y - you.y) < 2.2) {
+            dc.dance = rand(1, 1.8);
+            dc.pause = Math.max(dc.pause, dc.dance);
+          }
+        }
+      }
       if (you.busy > 0) {
         you.busy -= dt; you.moving = false;
         if (you.busy <= 0) you.hugWith = null;
@@ -853,7 +875,6 @@
         glints.push({ x: gt.x, y: gt.y, t: 0 });
       }
       var j;
-      for (j = rings.length - 1; j >= 0; j--)  { rings[j].t  += dt; if (rings[j].t  > 1)   rings.splice(j, 1); }
       for (j = floats.length - 1; j >= 0; j--) { floats[j].t += dt; if (floats[j].t > 1.4) floats.splice(j, 1); }
       for (j = glints.length - 1; j >= 0; j--) { glints[j].t += dt; if (glints[j].t > 0.7) glints.splice(j, 1); }
       for (j = hearts.length - 1; j >= 0; j--) { hearts[j].t += dt; if (hearts[j].t > 1.2) hearts.splice(j, 1); }
@@ -977,7 +998,7 @@
       // then never again this visit
       var tip = null;
       var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
-      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: (touch ? 'tap' : 'x') + ' · hug' };
+      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: touch ? 'tap · hug' : 'x · hug  v · dance' };
       else if (!you.gun) {
         for (var tg = 0; tg < floorGuns.length && !tip; tg++) {
           var tfg = floorGuns[tg];
@@ -1068,12 +1089,7 @@
         }
       }
 
-      // holo, where it's allowed: joins and the rare glint
-      for (var r = 0; r < rings.length; r++) {
-        var rg = rings[r];
-        ctx.strokeStyle = holoCss(rg.x / W, rg.y / H, simT, 1 - rg.t);
-        ctx.beginPath(); ctx.arc(rg.x * S, rg.y * S, (reduced ? 8 : rg.t * 22), 0, 7); ctx.stroke();
-      }
+      // holo, where it's allowed: the join "+1" and the rare glint
       for (var g = 0; g < glints.length; g++) {
         var gl = glints[g];
         ctx.fillStyle = holoCss(gl.x / W, gl.y / H, simT, (1 - gl.t / 0.7) * 0.9);
