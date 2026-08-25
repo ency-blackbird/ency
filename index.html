@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>ency</title>
 <meta name="description" content="ency">
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
@@ -20,7 +20,7 @@
     --mono:  ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; overflow: hidden; background: var(--paper); }
+  html, body { height: 100%; overflow: hidden; background: var(--paper); touch-action: pan-x pan-y; }
   body {
     color: var(--ink);
     font: 12px/1.6 var(--mono);
@@ -252,6 +252,12 @@
 <script>
 (async () => {
   'use strict';
+
+  // the page is an app surface: no pinch, no double-tap zoom. iOS ignores
+  // user-scalable=no in Safari, so its gesture events are blocked directly.
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('gesturechange', e => e.preventDefault());
+  document.addEventListener('dblclick', e => e.preventDefault());
 
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv = document.getElementById('cv');
