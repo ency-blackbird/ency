@@ -155,6 +155,15 @@
   // per-cell weld level: rises the moment a cell's grain has fully landed,
   // falls the moment it starts to lift — the fuse rides the morph's own wave
   var weldBuf=null;
+  // per-point flight state for the arrival: when the forming front reaches a
+  // grain, its position AND velocity are recorded, and it flies home on a
+  // Hermite curve — leaving along the swirl's own bearing, easing to zero at
+  // its cell. No grain ever changes trajectory; the swirl bends into the mark.
+  var PTS=700*56;
+  var detFlag=new Uint8Array(PTS);
+  var detX=new Float32Array(PTS), detY=new Float32Array(PTS);
+  var detTX=new Float32Array(PTS), detTY=new Float32Array(PTS);
+  var prevPX=new Float32Array(PTS), prevPY=new Float32Array(PTS);
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
   // the quantised diffraction colour for a cell, cached per (cell colour, level)
   function holoColorAt(idxc, lv, holo){
@@ -268,7 +277,7 @@
 
   // p = overall reflow progress 0..1 (0 = pure spinning ribbon, 1 = fully-formed mark)
   var HOLO_EXP=11.0;   // angular tolerance of the catch, set from holoWide each frame
-  function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt,Wp){
+  function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt,Wp,dFront){
     for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;glint[i]=0;weldBuf[i]=0;}
     var N=700,M=56,du=6.2832/N,dv=2/(M-1),D=3.7,K=N*M; // dense enough to fill even extreme detail without gaps
     // a forming FRONT sweeps out from the seed point (targets ordered by distance = TF).
@@ -306,7 +315,27 @@
         var tsx=TN?TX[trank]:px, tsy=TN?TY[trank]:py;  // static home; idle motion applied at draw time
         // Gather funnels the fly-source from the spread ribbon toward the single seed point
         var srcx=px+(originX-px)*state.gather, srcy=py+(originY-py)*state.gather;
-        var fx=srcx+(tsx-srcx)*mmi, fy=srcy+(tsy-srcy)*mmi;   // flies source → its spot as the front reaches it
+        var fx, fy;
+        if(dFront>0 && mmi>0 && mmi<1 && state.gather<0.01){
+          // arrival without a trajectory change: at detach, the grain keeps
+          // the swirl's own velocity and rides a Hermite home — direction
+          // continuous at both ends (swirl bearing in, zero at the cell)
+          if(!detFlag[k]){
+            detFlag[k]=1;
+            detX[k]=px; detY[k]=py;
+            var vfx=(px-prevPX[k])*(BAND/dFront), vfy=(py-prevPY[k])*(BAND/dFront);
+            var ddx2=tsx-px, ddy2=tsy-py, LL=Math.sqrt(ddx2*ddx2+ddy2*ddy2)+1e-3;
+            var vm=Math.sqrt(vfx*vfx+vfy*vfy), cap2=2.2*LL;
+            if(vm>cap2){ vfx*=cap2/vm; vfy*=cap2/vm; }
+            detTX[k]=vfx; detTY[k]=vfy;
+          }
+          var h00=(2*mmi-3)*mmi*mmi+1, h10=((mmi-2)*mmi+1)*mmi, h01=(3-2*mmi)*mmi*mmi;
+          fx=h00*detX[k]+h10*detTX[k]+h01*tsx;
+          fy=h00*detY[k]+h10*detTY[k]+h01*tsy;
+        } else {
+          if(mmi<=0){ detFlag[k]=0; prevPX[k]=px; prevPY[k]=py; }
+          fx=srcx+(tsx-srcx)*mmi; fy=srcy+(tsy-srcy)*mmi;   // flies source → its spot as the front reaches it
+        }
         var col=(fx/cellW)|0, row=(fy/cellH)|0;
         if(col<0||col>=cols||row<0||row>=rows) continue;
         var idx=row*cols+col;
@@ -348,7 +377,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,wAcc=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,wAcc=0,prevM=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -419,7 +448,8 @@
       wAcc+=dt/(1.2*state.tempo); if(wAcc>1)wAcc=1; Wn=wAcc;
     } else wAcc=0;
     var Wp=smoother(Wn)*(1+BANDf*0.9);
-    renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos,Wp);   // swarm scatters, then reflows into the strokes
+    var dFront=(m-prevM)*(1+BANDf); prevM=m;
+    renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos,Wp,dFront);   // swarm scatters, then reflows into the strokes
     var flowT=now/1000*0.35;
     var ramp=RAMPS[state.charset], RL=ramp.length-1;
     // How much the ambient field steps back as the mark lands. At 1 the backdrop
