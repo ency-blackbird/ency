@@ -327,6 +327,13 @@
       'opacity:0;transition:opacity 700ms ease;';
     document.body.appendChild(wrap);
 
+    // coordinates above the map: quiet telemetry that scrambles every so
+    // often and settles left-to-right into new readings
+    var coords = document.createElement('div');
+    coords.style.cssText = 'font:9px/1 ' + MONO + ';letter-spacing:0.18em;color:#5e5e5e;' +
+      'font-variant-numeric:tabular-nums;user-select:none;white-space:pre;';
+    wrap.appendChild(coords);
+
     var panel = document.createElement('div');
     panel.style.cssText = 'position:relative;' +
       'width:min(400px, 86vw);aspect-ratio:12/7;border-radius:16px;overflow:hidden;' +
@@ -343,7 +350,7 @@
     timerDate.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:#ffffff;' +
       'font-variant-numeric:tabular-nums;';
     var timerClock = document.createElement('div');
-    timerClock.style.cssText = 'font:10px/1 ' + MONO + ';letter-spacing:0.22em;color:rgba(255,255,255,0.75);' +
+    timerClock.style.cssText = 'font:700 13px/1 ' + MONO + ';letter-spacing:0.2em;color:#ffffff;' +
       'font-variant-numeric:tabular-nums;';
     timer.appendChild(timerDate);
     timer.appendChild(timerClock);
@@ -685,6 +692,15 @@
       };
     }
 
+    // ---- coordinates: current reading, scramble window, next-scramble timer
+    function makeCoords() {
+      return rand(0, 90).toFixed(4) + '°' + (Math.random() < 0.5 ? 'N' : 'S') +
+        '  ' + rand(0, 180).toFixed(4) + '°' + (Math.random() < 0.5 ? 'E' : 'W') +
+        '  ·  drift ' + rand(0, 0.02).toFixed(4);
+    }
+    var coordTarget = makeCoords(), coordScramT = 0, coordNextT = rand(4, 9);
+    coords.textContent = coordTarget;
+
     // ---- sim + draw
     var glintTimer = rand(8, 20);
     var simT = 0, last = performance.now(), raf = 0, alive = true;
@@ -693,25 +709,34 @@
     // months, then days, then the hh:mm:ss remainder
     var lastSec = 0;
     function two(n) { return n < 10 ? '0' + n : '' + n; }
-    function tickTimer() {
+    // the activation-clock style: hh:mm:ss:cc with the centiseconds racing.
+    // The calendar math runs once in a while; the racing display just counts
+    // real milliseconds down from that anchor, every frame.
+    var cdMonths = 0, cdRemMs = 0, cdRemAt = 0;
+    function recalcCal() {
       var now = new Date();
       var target = new Date(now.getFullYear(), 10, 13);
       if (target <= now) target = new Date(now.getFullYear() + 1, 10, 13);
       var months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
       var probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate(),
-                           now.getHours(), now.getMinutes(), now.getSeconds());
+                           now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
       if (probe > target) {
         months--;
         probe = new Date(now.getFullYear(), now.getMonth() + months, now.getDate(),
-                         now.getHours(), now.getMinutes(), now.getSeconds());
+                         now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
       }
-      var rem = Math.max(0, target - probe);
+      cdMonths = months;
+      cdRemMs = Math.max(0, target - probe);
+      cdRemAt = performance.now();
+    }
+    function tickTimer() {
+      var rem = Math.max(0, cdRemMs - (performance.now() - cdRemAt));
       var days = (rem / 86400000) | 0;
       rem -= days * 86400000;
       var hh = (rem / 3600000) | 0, mm = ((rem / 60000) | 0) % 60, ss = ((rem / 1000) | 0) % 60;
-      var c = now.getSeconds() % 2 ? ' ' : ':';       // the blink
-      timerDate.textContent = months + ' mo ' + days + ' d';
-      timerClock.textContent = two(hh) + c + two(mm) + c + two(ss);
+      var cc = ((rem / 10) | 0) % 100;
+      timerDate.textContent = cdMonths + ' mo ' + days + ' d';
+      timerClock.textContent = two(hh) + ':' + two(mm) + ':' + two(ss) + ':' + two(cc);
     }
 
     // walk toward the current waypoint (or the target), sliding along walls;
@@ -872,6 +897,21 @@
       }
       if (gunHintT > 0) gunHintT -= dt;
       if (tipFlashT > 0) tipFlashT -= dt;
+
+      // the coordinates scramble every so often, digits settling left to right
+      coordNextT -= dt;
+      if (coordNextT <= 0) { coordNextT = rand(6, 14); coordScramT = 0.9; coordTarget = makeCoords(); }
+      if (coordScramT > 0) {
+        coordScramT -= dt;
+        var prog = 1 - coordScramT / 0.9;
+        var out = '';
+        for (var cq = 0; cq < coordTarget.length; cq++) {
+          var chc = coordTarget[cq];
+          if (chc >= '0' && chc <= '9' && cq > prog * coordTarget.length) out += (Math.random() * 10) | 0;
+          else out += chc;
+        }
+        coords.textContent = coordScramT <= 0 ? coordTarget : out;
+      }
 
       glintTimer -= dt;
       if (glintTimer <= 0) {
@@ -1149,11 +1189,13 @@
       step(dt);
       draw();
       drawRecords();
+      tickTimer();                                   // the centiseconds race every frame
       var sec = (Date.now() / 1000) | 0;
-      if (sec !== lastSec) { lastSec = sec; tickTimer(); }
+      if (sec !== lastSec) { lastSec = sec; if (sec % 60 === 0) recalcCal(); }
       raf = requestAnimationFrame(frame);
     }
 
+    recalcCal();
     tickTimer();
     requestAnimationFrame(function () { wrap.style.opacity = '1'; });
     raf = requestAnimationFrame(frame);
