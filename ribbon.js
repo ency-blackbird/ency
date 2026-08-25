@@ -330,8 +330,15 @@
             detTX[k]=vfx; detTY[k]=vfy;
           }
           var h00=(2*mmi-3)*mmi*mmi+1, h10=((mmi-2)*mmi+1)*mmi, h01=(3-2*mmi)*mmi*mmi;
-          fx=h00*detX[k]+h10*detTX[k]+h01*tsx;
-          fy=h00*detY[k]+h10*detTY[k]+h01*tsy;
+          var fxH=h00*detX[k]+h10*detTX[k]+h01*tsx;
+          var fyH=h00*detY[k]+h10*detTY[k]+h01*tsy;
+          // re-anchor to the LIVING surface as the flight proceeds: pure
+          // Hermite at detach (keeps the swirl's bearing, no kink), easing
+          // onto the surface-coherent path mid-flight so neighbours stay
+          // neighbours and the sheet doesn't go holey as it stretches
+          var lnx=srcx+(tsx-srcx)*mmi, lny=srcy+(tsy-srcy)*mmi;
+          fx=fxH+(lnx-fxH)*mmi;
+          fy=fyH+(lny-fyH)*mmi;
         } else {
           if(mmi<=0){ detFlag[k]=0; prevPX[k]=px; prevPY[k]=py; }
           fx=srcx+(tsx-srcx)*mmi; fy=srcy+(tsy-srcy)*mmi;   // flies source → its spot as the front reaches it
