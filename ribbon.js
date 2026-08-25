@@ -152,6 +152,9 @@
   // the faint background field lives on its own layer, refreshed every few
   // frames — it evolves slowly, and it's most of the cells at high gran
   var bgCv=document.createElement('canvas'), bctx=bgCv.getContext('2d'), bgTick=0;
+  // per-cell weld level: rises the moment a cell's grain has fully landed,
+  // falls the moment it starts to lift — the fuse rides the morph's own wave
+  var weldBuf=null;
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
   // the quantised diffraction colour for a cell, cached per (cell colour, level)
   function holoColorAt(idxc, lv, holo){
@@ -228,6 +231,7 @@
     cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
     ctx.textBaseline='top'; ctx.textAlign='left';
     bgCv.width=W*dpr; bgCv.height=H*dpr; bctx.setTransform(dpr,0,0,dpr,0,0);
+    weldBuf=new Float32Array(cols*rows);
     bgTick=0;
     zbuf=new Float32Array(cols*rows); rib=new Float32Array(cols*rows);
     glint=new Float32Array(cols*rows);   // how hard this cell is catching the light, 3D
@@ -340,7 +344,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,settle=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -483,40 +487,27 @@
       ctx.drawImage(bgCv, 0, 0, W, H);
     }
 
-    // ---- the settle: once the mark lands, the original vector edge fades
-    // in UNDER the blocks — same ink, so it only shows where the blocks
-    // aren't: the stair-step gaps along the silhouette. The blocks never
-    // change, so nothing can snap; the outline just smooths into the drawn
-    // logo, and the ripple calms on the same clock. On dissolve it recedes
-    // before anything moves.
-    var sTarget=m>0.995?1:0;
-    if(reduce) settle=sTarget;
-    else settle += (sTarget-settle)*Math.min(1, dt*(sTarget?1.4:3.5));
-    var settleA=settle<0.01?0:settle>0.99?1:settle;
-    if(settleA>0.001 && logoPath){
-      ctx.save();
-      ctx.globalAlpha=settleA;
-      ctx.fillStyle=state.ink;
-      ctx.translate(fitX+driftX, fitY+bobY);
-      ctx.scale(fitS,fitS);
-      ctx.fill(logoPath,'evenodd');
-      ctx.restore();
-      ctx.globalAlpha=1;
-    }
-    var ripAmt=RIP*(1-settleA*0.65);   // the blocks calm as the edge settles
-
-    // ---- mark layer: every frame, live glyphs at full strength — the
-    // original renderer. Seams between landed blocks are closed by the font
-    // itself (a hair over cell height); the interior texture never dims.
+    // ---- mark layer: live glyphs at true sub-pixel positions, and the weld
+    // as part of the same gesture. Each cell's weld level rises the moment
+    // ITS grain has fully landed (rib hits exactly 1 only then) and falls
+    // the moment its grain begins to lift — so fusion sweeps across the mark
+    // in the same order and rhythm as the morph front itself. A welded cell
+    // fattens into a full block that bleeds into its neighbours, its ripple
+    // calming as it sets. No global clock, no second rendering: the mesh's
+    // own motion drives the smoothing.
+    var wRate=reduce?1:Math.min(1, dt*3.5);
     for(var gy=0;gy<rows;gy++){
       for(var gx=0;gx<cols;gx++){
         var idx=gy*cols+gx, ribB=rib[idx];
-        if(ribB<=0.02) continue;
+        var wl=weldBuf[idx];
+        if(ribB<=0.02){ if(wl>0.001) weldBuf[idx]=wl*(1-wRate); continue; }
+        wl+=((ribB>=0.9995?1:0)-wl)*wRate; weldBuf[idx]=wl;
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
         if(alpha<0.055) continue;
-        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*ripAmt*idle + dispX[idx];
-        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*ripAmt*0.8*idle + dispY[idx];
+        var ra2=RIP*(1-wl*0.85);       // set cells stop rippling, arriving ones still do
+        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*ra2*idle + dispX[idx];
+        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*ra2*0.8*idle + dispY[idx];
         var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
@@ -530,9 +521,17 @@
             tinted=true;
           } else if(lastFill!==state.ink){ ctx.fillStyle=state.ink; lastFill=state.ink; }
         }
-        ctx.globalAlpha=alpha>1?1:alpha;
-        if(tinted) ctx.fillText(ch, dx, dy);
-        else { var tile=atlas[ci]; if(tile) ctx.drawImage(tile, dx-2, dy-2, atlasTW, atlasTH); }
+        var a1=alpha>1?1:alpha;
+        if(wl>0.01){                   // the landed block, fusing with its neighbours
+          if(!tinted && lastFill!==state.ink){ ctx.fillStyle=state.ink; lastFill=state.ink; }
+          ctx.globalAlpha=a1*wl;
+          ctx.fillRect(dx-0.4, dy-0.4, cellW+0.8, cellH+0.8);
+        }
+        if(wl<0.99){                   // the glyph, easing out as its cell sets
+          ctx.globalAlpha=a1*(1-wl*0.9);
+          if(tinted) ctx.fillText(ch, dx, dy);
+          else { var tile=atlas[ci]; if(tile) ctx.drawImage(tile, dx-2, dy-2, atlasTW, atlasTH); }
+        }
         if(tinted){
           // reflection cloning: a grating repeats the catch one diffraction
           // order out on either side, dispersed by the field where the clone
