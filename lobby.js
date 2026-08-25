@@ -389,6 +389,20 @@
     sizeFx();
     addEventListener('resize', sizeFx);
 
+    // on touch screens, carrying a gun grows a one-tap drop chip — every
+    // gesture stays a tap (long-press already belongs to the fog stream)
+    var dropBtn = document.createElement('div');
+    dropBtn.style.cssText = 'position:absolute;right:7px;bottom:7px;display:none;' +
+      'font:9px/1 ' + MONO + ';letter-spacing:0.18em;color:#d0d0d0;' +
+      'background:#2a2a2a;border:1px solid #454545;border-radius:2px;' +
+      'padding:5px 7px 4px;box-shadow:1px 1px 0 rgba(0,0,0,0.45);cursor:pointer;';
+    dropBtn.textContent = 'drop';
+    panel.appendChild(dropBtn);
+    dropBtn.addEventListener('pointerdown', function (e) {
+      e.stopPropagation();
+      tryDrop();
+    });
+
     // the action nudge — crisp DOM text floated over the map, never canvas
     var tipEl = document.createElement('div');
     tipEl.style.cssText = 'position:absolute;left:0;top:0;white-space:pre;text-align:center;' +
@@ -1076,6 +1090,7 @@
         tipEl.style.top = (tip.y / H * 100) + '%';
       }
       tipEl.style.opacity = tipFlashT > 0 ? '1' : '0';
+      dropBtn.style.display = (touch && you.gun) ? 'block' : 'none';
 
       // confetti — foil, not crayon: every fleck samples the same desaturated
       // diffraction field as the rest of the site, shimmering as it tumbles
