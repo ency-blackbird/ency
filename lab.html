@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>ency lab — mesh v2</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; background:#070707; touch-action:none; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+  .tag {
+    position:fixed; top:16px; left:16px; z-index:2;
+    font:10px/1 ui-monospace,"SF Mono",Menlo,monospace; letter-spacing:0.24em;
+    color:#4e4e4e; user-select:none;
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="tag">lab / mesh v2 — webgl</div>
+<script type="module">
+import * as THREE from '/three.module.js';
+
+const LOGO_D = "M 90.297 11.198 C 89.114 12.464, 85.619 18.435, 82.531 24.468 C 79.443 30.500, 76.259 36.161, 75.456 37.049 C 74.653 37.936, 74.298 38.965, 74.668 39.335 C 75.038 39.705, 74.415 41.019, 73.284 42.254 C 72.152 43.489, 69.751 47.200, 67.949 50.500 C 66.147 53.800, 63.842 57.433, 62.828 58.573 C 61.814 59.713, 59.498 63.538, 57.682 67.073 C 51.697 78.721, 46.707 87.469, 44.873 89.529 C 43.879 90.645, 40.100 97.845, 36.474 105.529 C 27.188 125.210, 27.355 124.810, 25.415 132 C 23.451 139.281, 22.592 140.767, 21.431 138.889 C 19.008 134.967, 18.940 96.612, 21.328 80 C 22.237 73.675, 23.098 61.975, 23.241 54 L 23.500 39.500 21.441 39.206 C 20.309 39.044, 18.114 39.909, 16.563 41.129 L 13.742 43.348 14.251 52.262 L 14.759 61.176 13.311 64.078 C 11.213 68.284, 9.635 90.139, 9.563 116 L 9.500 138.500 11.456 144.500 C 13.723 151.454, 16.039 154.446, 21.210 157.097 C 27.744 160.448, 31.626 159.491, 53 149.260 C 60.975 145.443, 69.975 141.381, 73 140.234 C 88.705 134.279, 98.006 131.092, 101.555 130.452 C 103.725 130.060, 105.950 129.405, 106.500 128.996 C 110.220 126.230, 123.103 127.454, 130.637 131.289 C 132.212 132.091, 134.512 133.059, 135.750 133.441 L 138 134.135 137.919 129.817 C 137.874 127.410, 136.879 123.749, 135.669 121.542 L 133.500 117.583 128.801 115.908 C 126.216 114.986, 123.898 114.435, 123.650 114.683 C 122.624 115.710, 113.094 109.699, 107.566 104.539 C 104.302 101.493, 101.233 99, 100.746 99 C 99.274 99, 91.182 93.181, 78.135 82.742 C 71.334 77.301, 65.146 72.610, 64.385 72.317 C 62.556 71.616, 62.605 68.089, 64.454 67.379 C 65.254 67.072, 66.901 64.724, 68.115 62.161 C 69.328 59.597, 72.682 53.900, 75.568 49.500 C 78.453 45.100, 83.071 37.675, 85.831 33 C 88.590 28.325, 92.120 22.964, 93.674 21.087 C 95.228 19.210, 97.261 16.430, 98.191 14.910 L 99.881 12.147 98.685 11.154 C 98.027 10.608, 96.354 9.876, 94.968 9.528 L 92.447 8.895 90.297 11.198 M 52.199 87.750 C 51.134 89.263, 49.947 91.515, 49.562 92.755 C 49.177 93.996, 47.748 96.335, 46.386 97.953 C 44.268 100.470, 37.991 116.153, 34.874 126.714 C 34.353 128.481, 33.493 130.196, 32.963 130.523 C 31.817 131.231, 31.692 141.967, 32.809 143.725 L 33.588 144.951 40.044 142.665 C 43.595 141.408, 48.695 139.394, 51.377 138.189 C 54.060 136.985, 56.522 136, 56.850 136 C 57.178 136, 60.608 134.495, 64.473 132.655 C 73.269 128.467, 76.498 127.311, 86.500 124.764 C 90.900 123.643, 95.175 122.331, 96 121.849 C 96.825 121.366, 98.737 120.484, 100.250 119.888 C 102.810 118.879, 104.056 117, 102.164 117 C 101.232 117, 90.741 109.064, 84.357 103.529 C 79.468 99.291, 72.275 94, 71.403 94 C 71.064 94, 69.075 92.644, 66.982 90.986 C 63.361 88.118, 57.172 85, 55.100 85 C 54.570 85, 53.265 86.237, 52.199 87.750";
+
+// ---------- targets: rasterize the mark, collect cell centres in world space
+const RW = 120, RH = 136;
+const rc = document.createElement('canvas'); rc.width = RW; rc.height = RH;
+const rg = rc.getContext('2d');
+const VB = [148, 168];
+const fit = Math.min(RW / VB[0], RH / VB[1]);
+rg.setTransform(fit, 0, 0, fit, (RW - VB[0] * fit) / 2, (RH - VB[1] * fit) / 2);
+rg.fillStyle = '#fff';
+rg.fill(new Path2D(LOGO_D), 'evenodd');
+const rd = rg.getImageData(0, 0, RW, RH).data;
+const targets = [];
+const WORLD_H = 1.5;                       // logo height in world units
+for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
+  if (rd[(y * RW + x) * 4 + 3] > 90) {
+    targets.push([
+      ((x + 0.5) / RW - 0.5) * WORLD_H * (RW / RH),
+      (0.5 - (y + 0.5) / RH) * WORLD_H,
+    ]);
+  }
+}
+// formation order: distance from the top-most target, like the seed sweep
+const seed = targets.reduce((a, b) => (b[1] > a[1] ? b : a), targets[0]);
+let maxD = 1e-6;
+const orders = targets.map(t => {
+  const d = Math.hypot(t[0] - seed[0], t[1] - seed[1]);
+  if (d > maxD) maxD = d;
+  return d;
+});
+for (let i = 0; i < orders.length; i++) orders[i] /= maxD;
+
+// ---------- glyph atlas: the blocks ramp, white on transparent
+const RAMP = [' ', '·', '░', '▒', '▓', '█'];
+const GN = RAMP.length, GS = 64;
+const ac = document.createElement('canvas'); ac.width = GN * GS; ac.height = GS;
+const ag = ac.getContext('2d');
+ag.font = '700 ' + (GS * 0.92) + 'px "SF Mono", ui-monospace, Menlo, monospace';
+ag.textAlign = 'center'; ag.textBaseline = 'middle';
+ag.fillStyle = '#fff';
+for (let i = 0; i < GN; i++) ag.fillText(RAMP[i], i * GS + GS / 2, GS * 0.56);
+const atlas = new THREE.CanvasTexture(ac);
+atlas.minFilter = THREE.LinearFilter; atlas.magFilter = THREE.LinearFilter;
+
+// ---------- instanced geometry: one quad per grain, everything else on GPU
+const NU = 700, NV = 190, COUNT = NU * NV;
+const geo = new THREE.InstancedBufferGeometry();
+geo.instanceCount = COUNT;
+geo.setAttribute('corner', new THREE.Float32BufferAttribute([-0.5,-0.5, 0.5,-0.5, -0.5,0.5, 0.5,0.5], 2));
+geo.setIndex([0, 1, 2, 2, 1, 3]);
+const aUV = new Float32Array(COUNT * 2);
+const aTgt = new Float32Array(COUNT * 2);
+const aOrd = new Float32Array(COUNT);
+const aSeed = new Float32Array(COUNT);
+let k = 0;
+for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+  aUV[k * 2] = i / NU * Math.PI * 2;
+  aUV[k * 2 + 1] = -1 + 2 * j / (NV - 1);
+  const ti = (k * targets.length / COUNT) | 0;
+  aTgt[k * 2] = targets[ti][0];
+  aTgt[k * 2 + 1] = targets[ti][1];
+  aOrd[k] = orders[ti];
+  aSeed[k] = Math.random();
+  k++;
+}
+geo.setAttribute('aUV', new THREE.InstancedBufferAttribute(aUV, 2));
+geo.setAttribute('aTgt', new THREE.InstancedBufferAttribute(aTgt, 2));
+geo.setAttribute('aOrd', new THREE.InstancedBufferAttribute(aOrd, 1));
+geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(aSeed, 1));
+
+const uniforms = {
+  uAtlas:  { value: atlas },
+  uSpin:   { value: 0 },
+  uTilt:   { value: -0.5 },
+  uRoll:   { value: 0 },
+  uFront:  { value: 0 },
+  uBand:   { value: 0.76 },
+  uChaos:  { value: 0 },
+  uTwist:  { value: 1 },
+  uTime:   { value: 0 },
+  uSize:   { value: 0.0165 },
+  uInk:    { value: new THREE.Color('#c8c9cc') },
+};
+
+const vert = /* glsl */`
+precision highp float;
+uniform mat4 modelViewMatrix, projectionMatrix;
+uniform float uSpin, uTilt, uRoll, uFront, uBand, uChaos, uTwist, uTime, uSize;
+attribute vec2 corner, aUV, aTgt;
+attribute float aOrd, aSeed;
+varying vec2 vUV;
+varying vec3 vN, vP;
+varying float vMmi, vShade;
+
+float hashN(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hashN(i), hashN(i + vec2(1, 0)), u.x),
+             mix(hashN(i + vec2(0, 1)), hashN(i + vec2(1, 1)), u.x), u.y);
+}
+vec3 ribPt(float u, float v){
+  float HW = 0.42;
+  float r = 1.0 + v * HW * cos(uTwist * u * 0.5);
+  return vec3(r * cos(u), r * sin(u), v * HW * sin(uTwist * u * 0.5));
+}
+vec3 rotAll(vec3 p){
+  float cs = cos(uSpin), ss = sin(uSpin);
+  p = vec3(cs * p.x + ss * p.z, p.y, -ss * p.x + cs * p.z);
+  float ct = cos(uTilt), st = sin(uTilt);
+  p = vec3(p.x, ct * p.y - st * p.z, st * p.y + ct * p.z);
+  float cr = cos(uRoll), sr = sin(uRoll);
+  return vec3(cr * p.x - sr * p.y, sr * p.x + cr * p.y, p.z);
+}
+float smoother(float t){ t = clamp(t, 0.0, 1.0); return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
+
+void main(){
+  float mmi = smoother((uFront - aOrd) / uBand);
+  vMmi = mmi;
+
+  vec3 P = ribPt(aUV.x, aUV.y);
+  // the swarm: value-noise scatter that the landing retires
+  if (uChaos > 0.001) {
+    float c = uChaos * (1.0 - mmi);
+    P.x += (vnoise(vec2(aUV.x * 0.7 + uTime * 0.8, aUV.y * 1.1)) - 0.5) * c;
+    P.y += (vnoise(vec2(aUV.x * 0.7 + 9.1, aUV.y * 1.1 + uTime * 0.8)) - 0.5) * c;
+    P.z += (vnoise(vec2(aUV.x * 0.7 + uTime * 0.64, aUV.y * 1.1 + 4.2)) - 0.5) * c * 0.8;
+  }
+  P.z *= (1.0 - mmi);                       // the sheet flattens as it lands
+
+  // surface tangents for true grain orientation
+  float e = 0.012;
+  vec3 Tu = normalize(ribPt(aUV.x + e, aUV.y) - ribPt(aUV.x - e, aUV.y));
+  vec3 Tv = normalize(ribPt(aUV.x, aUV.y + e) - ribPt(aUV.x, aUV.y - e));
+
+  vec3 Pr = rotAll(P);
+  vec3 TuR = rotAll(Tu), TvR = rotAll(Tv);
+
+  vec3 home = vec3(aTgt, 0.0);
+  vec3 pos = mix(Pr, home, mmi);
+
+  // grains sit ON the surface mid-flight, easing flat as they land
+  vec3 ax = normalize(mix(TuR, vec3(1.0, 0.0, 0.0), mmi));
+  vec3 ay = normalize(mix(TvR, vec3(0.0, 1.0, 0.0), mmi));
+  vN = normalize(cross(ax, ay));
+  vShade = abs(dot(vN, normalize(vec3(0.35, 0.5, 0.79))));
+
+  vec3 world = pos + (corner.x * ax + corner.y * ay) * uSize * (1.0 + 0.35 * aSeed);
+  vUV = corner + 0.5;
+  vP = world;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
+}`;
+
+const frag = /* glsl */`
+precision highp float;
+uniform sampler2D uAtlas;
+uniform vec3 uInk;
+varying vec2 vUV;
+varying vec3 vN, vP;
+varying float vMmi, vShade;
+
+vec3 wl2rgb(float w){
+  vec3 c;
+  if      (w < 440.0) c = vec3((440.0 - w) / 60.0, 0.0, 1.0);
+  else if (w < 490.0) c = vec3(0.0, (w - 440.0) / 50.0, 1.0);
+  else if (w < 510.0) c = vec3(0.0, 1.0, (510.0 - w) / 20.0);
+  else if (w < 580.0) c = vec3((w - 510.0) / 70.0, 1.0, 0.0);
+  else if (w < 645.0) c = vec3(1.0, (645.0 - w) / 65.0, 0.0);
+  else                c = vec3(1.0, 0.0, 0.0);
+  return clamp(c, 0.0, 1.0);
+}
+
+void main(){
+  // the ramp as a live LUT: shading picks the glyph
+  float shade = clamp(max(0.30 + 0.70 * vShade, vMmi), 0.0, 1.0);
+  float col = floor(shade * 5.0 + 0.5);
+  vec2 auv = vec2((col + vUV.x) / 6.0, vUV.y);
+  float a = texture2D(uAtlas, auv).a;
+  if (a < 0.12) discard;
+
+  // thin-film glint: the lamp catch disperses per-pixel, retired as it lands
+  vec3 L = normalize(vec3(1.7, 2.0, 2.4) - vP);
+  vec3 V = normalize(vec3(0.0, 0.0, 4.2) - vP);
+  vec3 H = normalize(L + V);
+  float g = pow(abs(dot(vN, H)), 42.0) * (1.0 - vMmi);
+  vec3 ink = uInk;
+  if (g > 0.10) {
+    float wl = 380.0 + 400.0 * fract(vP.x * 1.7 + vP.y * 2.9 + dot(vN, vec3(0.6, 0.3, 0.4)));
+    vec3 tint = wl2rgb(wl);
+    float lum = dot(tint, vec3(0.2126, 0.7152, 0.0722));
+    tint = mix(vec3(lum), tint, 0.62);
+    ink = mix(ink, tint, clamp(g * 0.8, 0.0, 0.55));
+  }
+  gl_FragColor = vec4(ink, a * (0.35 + 0.65 * shade));
+}`;
+
+const mat = new THREE.RawShaderMaterial({
+  uniforms, vertexShader: vert, fragmentShader: frag,
+  transparent: true, depthWrite: false, side: THREE.DoubleSide,
+});
+// RawShaderMaterial needs the matrices declared but three still supplies them
+const mesh = new THREE.Mesh(geo, mat);
+mesh.frustumCulled = false;
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+cam.position.z = 4.2;
+scene.add(mesh);
+
+function size(){
+  renderer.setSize(innerWidth, innerHeight);
+  cam.aspect = innerWidth / innerHeight;
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', size);
+size();
+
+// ---------- the choreography clock: same phases as the site's mesh
+const SPIN = 2.4, RES = 4.4, HOLD = 3.0, DISS = 3.4, DRIFT = 3.0, REF = 4.4;
+const CYC = HOLD + DISS + DRIFT + REF;
+const T0 = SPIN + RES;
+const start = performance.now();
+let spin = 0.6, last = start;
+
+function cycleM(c){
+  if (c < HOLD) return 1;
+  if (c < HOLD + DISS) return 1 - (c - HOLD) / DISS;
+  if (c < HOLD + DISS + DRIFT) return 0;
+  return (c - (HOLD + DISS + DRIFT)) / REF;
+}
+
+function frame(now){
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const tt = (now - start) / 1000;
+  let m;
+  if (tt < SPIN) m = 0;
+  else if (tt < T0) m = (tt - SPIN) / RES;
+  else m = cycleM((tt - T0) % CYC);
+
+  const sd = (1 - m) * (1 - m);            // the sheet stops as the mark forms
+  spin += dt * 0.7 * sd;
+
+  uniforms.uSpin.value = spin;
+  uniforms.uTime.value = tt;
+  uniforms.uFront.value = m * (1 + uniforms.uBand.value);
+  uniforms.uChaos.value = 1.4 * Math.min(1, tt / 1.4);   // intro eases in
+  uniforms.uTilt.value = -0.5 + Math.sin(tt * 0.35) * 0.3 * (1 - m);
+  uniforms.uRoll.value = Math.cos(tt * 0.45) * 0.35 * (1 - m);
+
+  renderer.render(scene, cam);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
