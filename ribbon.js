@@ -60,7 +60,7 @@
     if(state.random){
       mp={ phase:Math.random()*6.283, dir:Math.random()<0.5?-1:1,
            rate:0.5+Math.random()*0.95, tilt:-(0.3+Math.random()*0.55),
-           rz:(Math.random()-0.5)*1.15, tw:1+Math.floor(Math.random()*3) };
+           rz:(Math.random()-0.5)*1.15, tw:1+Math.floor(Math.random()*2) };   // twist ≤2: three folds read as tangle
     } else { mp={phase:0.6,dir:1,rate:0.7,tilt:-0.5,rz:0,tw:state.twist}; }
     // reveal order for THIS cycle: auto = mostly sweep, occasionally hand-write
     mp.write = state.reveal==='write' ? true : state.reveal==='sweep' ? false : (Math.random()<WRITE_CHANCE);
@@ -155,15 +155,6 @@
   // per-cell weld level: rises the moment a cell's grain has fully landed,
   // falls the moment it starts to lift — the fuse rides the morph's own wave
   var weldBuf=null;
-  // per-point flight state for the arrival: when the forming front reaches a
-  // grain, its position AND velocity are recorded, and it flies home on a
-  // Hermite curve — leaving along the swirl's own bearing, easing to zero at
-  // its cell. No grain ever changes trajectory; the swirl bends into the mark.
-  var PTS=700*56;
-  var detFlag=new Uint8Array(PTS);
-  var detX=new Float32Array(PTS), detY=new Float32Array(PTS);
-  var detTX=new Float32Array(PTS), detTY=new Float32Array(PTS);
-  var prevPX=new Float32Array(PTS), prevPY=new Float32Array(PTS);
   var holoCache=null, holoCacheKey='', cacheInk=[192,192,192];
   // the quantised diffraction colour for a cell, cached per (cell colour, level)
   function holoColorAt(idxc, lv, holo){
@@ -277,13 +268,13 @@
 
   // p = overall reflow progress 0..1 (0 = pure spinning ribbon, 1 = fully-formed mark)
   var HOLO_EXP=11.0;   // angular tolerance of the catch, set from holoWide each frame
-  function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt,Wp,dFront){
+  function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt,Wp){
     for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;glint[i]=0;weldBuf[i]=0;}
     var N=700,M=56,du=6.2832/N,dv=2/(M-1),D=3.7,K=N*M; // dense enough to fill even extreme detail without gaps
     // a forming FRONT sweeps out from the seed point (targets ordered by distance = TF).
     // Trail tightens the front → a narrow wave that draws the mark from the seed outward.
     var BAND=0.14+(1-state.trail)*0.95, front=p*(1+BAND);
-    var wBand=BAND*0.9;   // the weld is a second front of the same family, see frame()
+    var wBand=BAND*2.5;   // wide: the weld reads as a soft global set, not a visible wave
     var k=-1;
     for(var i=0;i<N;i++){
       var uu=i*du;
@@ -315,34 +306,11 @@
         var tsx=TN?TX[trank]:px, tsy=TN?TY[trank]:py;  // static home; idle motion applied at draw time
         // Gather funnels the fly-source from the spread ribbon toward the single seed point
         var srcx=px+(originX-px)*state.gather, srcy=py+(originY-py)*state.gather;
-        var fx, fy;
-        if(dFront>0 && mmi>0 && mmi<1 && state.gather<0.01){
-          // arrival without a trajectory change: at detach, the grain keeps
-          // the swirl's own velocity and rides a Hermite home — direction
-          // continuous at both ends (swirl bearing in, zero at the cell)
-          if(!detFlag[k]){
-            detFlag[k]=1;
-            detX[k]=px; detY[k]=py;
-            var vfx=(px-prevPX[k])*(BAND/dFront), vfy=(py-prevPY[k])*(BAND/dFront);
-            var ddx2=tsx-px, ddy2=tsy-py, LL=Math.sqrt(ddx2*ddx2+ddy2*ddy2)+1e-3;
-            var vm=Math.sqrt(vfx*vfx+vfy*vfy), cap2=2.2*LL;
-            if(vm>cap2){ vfx*=cap2/vm; vfy*=cap2/vm; }
-            detTX[k]=vfx; detTY[k]=vfy;
-          }
-          var h00=(2*mmi-3)*mmi*mmi+1, h10=((mmi-2)*mmi+1)*mmi, h01=(3-2*mmi)*mmi*mmi;
-          var fxH=h00*detX[k]+h10*detTX[k]+h01*tsx;
-          var fyH=h00*detY[k]+h10*detTY[k]+h01*tsy;
-          // re-anchor to the LIVING surface as the flight proceeds: pure
-          // Hermite at detach (keeps the swirl's bearing, no kink), easing
-          // onto the surface-coherent path mid-flight so neighbours stay
-          // neighbours and the sheet doesn't go holey as it stretches
-          var lnx=srcx+(tsx-srcx)*mmi, lny=srcy+(tsy-srcy)*mmi;
-          fx=fxH+(lnx-fxH)*mmi;
-          fy=fyH+(lny-fyH)*mmi;
-        } else {
-          if(mmi<=0){ detFlag[k]=0; prevPX[k]=px; prevPY[k]=py; }
-          fx=srcx+(tsx-srcx)*mmi; fy=srcy+(tsy-srcy)*mmi;   // flies source → its spot as the front reaches it
-        }
+        // one path, one motion: the blend's easing has zero velocity at both
+        // ends, and the sheet itself decelerates to a stop as it forms (see
+        // frame()) — so grains glide off a stilling surface and settle, with
+        // no second mechanism needed
+        var fx=srcx+(tsx-srcx)*mmi, fy=srcy+(tsy-srcy)*mmi;   // flies source → its spot as the front reaches it
         var col=(fx/cellW)|0, row=(fy/cellH)|0;
         if(col<0||col>=cols||row<0||row>=rows) continue;
         var idx=row*cols+col;
@@ -384,7 +352,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,wAcc=0,prevM=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,wAcc=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -412,8 +380,11 @@
         rollMotion(); if(TN) computeStagger(state.random?rand(TN):0); }
       m=cycleM(cyclePhase);
     }
-    // accumulate rotation from a per-frame delta → resets cleanly on replay, never jumps
-    spinAngle += dt*mp.rate*mp.dir*(1-m*0.85)/state.tempo;
+    // accumulate rotation from a per-frame delta → resets cleanly on replay, never jumps.
+    // the sheet DECELERATES TO A FULL STOP as the mark forms — (1-m)² — so the
+    // last grains detach from a still surface and the convergence is calm
+    var sd=(1-m)*(1-m);
+    spinAngle += dt*mp.rate*mp.dir*sd/state.tempo;
     // swarm intensity: eased, never detonated. The intro builds from calm
     // instead of opening at full chaos, and every loop tumble breathes in and
     // out (rising from the dissolve, settling before the reform) — at high
@@ -454,9 +425,8 @@
     } else if(m>=1){
       wAcc+=dt/(1.2*state.tempo); if(wAcc>1)wAcc=1; Wn=wAcc;
     } else wAcc=0;
-    var Wp=smoother(Wn)*(1+BANDf*0.9);
-    var dFront=(m-prevM)*(1+BANDf); prevM=m;
-    renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos,Wp,dFront);   // swarm scatters, then reflows into the strokes
+    var Wp=smoother(Wn)*(1+BANDf*2.5);
+    renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos,Wp);   // swarm scatters, then reflows into the strokes
     var flowT=now/1000*0.35;
     var ramp=RAMPS[state.charset], RL=ramp.length-1;
     // How much the ambient field steps back as the mark lands. At 1 the backdrop
