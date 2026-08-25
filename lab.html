@@ -13,6 +13,24 @@
     font:10px/1 ui-monospace,"SF Mono",Menlo,monospace; letter-spacing:0.24em;
     color:#4e4e4e; user-select:none;
   }
+  .dials {
+    position:fixed; top:14px; right:14px; z-index:3; width:190px;
+    font:10px/1.9 ui-monospace,"SF Mono",Menlo,monospace; letter-spacing:0.08em;
+    color:#8a8a8a; background:rgba(7,7,7,0.85); border:1px solid #1e1e1e;
+    padding:8px 12px 10px; user-select:none; touch-action:auto;
+  }
+  .dials .top { display:flex; justify-content:space-between; align-items:center;
+    color:#4e4e4e; letter-spacing:0.24em; margin-bottom:2px; }
+  .dials .row { display:flex; align-items:center; gap:8px; }
+  .dials label { width:38px; color:#6e6e6e; }
+  .dials output { width:40px; text-align:right; color:#c8c9cc; }
+  .dials input[type=range] { flex:1; min-width:0; width:100%; accent-color:#c8c9cc; height:2px; }
+  .dials button { background:none; border:0; color:#4e4e4e; font:inherit;
+    letter-spacing:0.12em; cursor:pointer; padding:0; }
+  .dials button:hover { color:#c8c9cc; }
+  .dials.hidden .row, .dials.hidden .foot { display:none; }
+  .dials .foot { display:flex; justify-content:space-between; margin-top:4px; }
+  .dials .fps { color:#4e4e4e; }
 </style>
 </head>
 <body>
@@ -22,39 +40,27 @@
 import * as THREE from '/three.module.js';
 
 const LOGO_D = "M 90.297 11.198 C 89.114 12.464, 85.619 18.435, 82.531 24.468 C 79.443 30.500, 76.259 36.161, 75.456 37.049 C 74.653 37.936, 74.298 38.965, 74.668 39.335 C 75.038 39.705, 74.415 41.019, 73.284 42.254 C 72.152 43.489, 69.751 47.200, 67.949 50.500 C 66.147 53.800, 63.842 57.433, 62.828 58.573 C 61.814 59.713, 59.498 63.538, 57.682 67.073 C 51.697 78.721, 46.707 87.469, 44.873 89.529 C 43.879 90.645, 40.100 97.845, 36.474 105.529 C 27.188 125.210, 27.355 124.810, 25.415 132 C 23.451 139.281, 22.592 140.767, 21.431 138.889 C 19.008 134.967, 18.940 96.612, 21.328 80 C 22.237 73.675, 23.098 61.975, 23.241 54 L 23.500 39.500 21.441 39.206 C 20.309 39.044, 18.114 39.909, 16.563 41.129 L 13.742 43.348 14.251 52.262 L 14.759 61.176 13.311 64.078 C 11.213 68.284, 9.635 90.139, 9.563 116 L 9.500 138.500 11.456 144.500 C 13.723 151.454, 16.039 154.446, 21.210 157.097 C 27.744 160.448, 31.626 159.491, 53 149.260 C 60.975 145.443, 69.975 141.381, 73 140.234 C 88.705 134.279, 98.006 131.092, 101.555 130.452 C 103.725 130.060, 105.950 129.405, 106.500 128.996 C 110.220 126.230, 123.103 127.454, 130.637 131.289 C 132.212 132.091, 134.512 133.059, 135.750 133.441 L 138 134.135 137.919 129.817 C 137.874 127.410, 136.879 123.749, 135.669 121.542 L 133.500 117.583 128.801 115.908 C 126.216 114.986, 123.898 114.435, 123.650 114.683 C 122.624 115.710, 113.094 109.699, 107.566 104.539 C 104.302 101.493, 101.233 99, 100.746 99 C 99.274 99, 91.182 93.181, 78.135 82.742 C 71.334 77.301, 65.146 72.610, 64.385 72.317 C 62.556 71.616, 62.605 68.089, 64.454 67.379 C 65.254 67.072, 66.901 64.724, 68.115 62.161 C 69.328 59.597, 72.682 53.900, 75.568 49.500 C 78.453 45.100, 83.071 37.675, 85.831 33 C 88.590 28.325, 92.120 22.964, 93.674 21.087 C 95.228 19.210, 97.261 16.430, 98.191 14.910 L 99.881 12.147 98.685 11.154 C 98.027 10.608, 96.354 9.876, 94.968 9.528 L 92.447 8.895 90.297 11.198 M 52.199 87.750 C 51.134 89.263, 49.947 91.515, 49.562 92.755 C 49.177 93.996, 47.748 96.335, 46.386 97.953 C 44.268 100.470, 37.991 116.153, 34.874 126.714 C 34.353 128.481, 33.493 130.196, 32.963 130.523 C 31.817 131.231, 31.692 141.967, 32.809 143.725 L 33.588 144.951 40.044 142.665 C 43.595 141.408, 48.695 139.394, 51.377 138.189 C 54.060 136.985, 56.522 136, 56.850 136 C 57.178 136, 60.608 134.495, 64.473 132.655 C 73.269 128.467, 76.498 127.311, 86.500 124.764 C 90.900 123.643, 95.175 122.331, 96 121.849 C 96.825 121.366, 98.737 120.484, 100.250 119.888 C 102.810 118.879, 104.056 117, 102.164 117 C 101.232 117, 90.741 109.064, 84.357 103.529 C 79.468 99.291, 72.275 94, 71.403 94 C 71.064 94, 69.075 92.644, 66.982 90.986 C 63.361 88.118, 57.172 85, 55.100 85 C 54.570 85, 53.265 86.237, 52.199 87.750";
-
-// ---------- targets: rasterize the mark, collect cell centres in world space
-const RW = 91, RH = 64;                    // cells 0.62 aspect, like a monospace grid
-const rc = document.createElement('canvas'); rc.width = RW; rc.height = RH;
-const rg = rc.getContext('2d');
 const VB = [148, 168];
-rg.setTransform(RW / VB[0], 0, 0, RH / VB[1], 0, 0);
-rg.fillStyle = '#fff';
-rg.fill(new Path2D(LOGO_D), 'evenodd');
-const rd = rg.getImageData(0, 0, RW, RH).data;
-const targets = [];
 const WORLD_H = 1.5;                       // logo height in world units
 const WORLD_W = WORLD_H * VB[0] / VB[1];
-for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
-  if (rd[(y * RW + x) * 4 + 3] > 90) {
-    targets.push([
-      ((x + 0.5) / RW - 0.5) * WORLD_W,
-      (0.5 - (y + 0.5) / RH) * WORLD_H,
-    ]);
-  }
-}
-// formation order: distance from the top-most target, like the seed sweep
-const seed = targets.reduce((a, b) => (b[1] > a[1] ? b : a), targets[0]);
-let maxD = 1e-6;
-const orders = targets.map(t => {
-  const d = Math.hypot(t[0] - seed[0], t[1] - seed[1]);
-  if (d > maxD) maxD = d;
-  return d;
-});
-for (let i = 0; i < orders.length; i++) orders[i] /= maxD;
+
+// ---------- dials: persisted locally, same tempo semantics as the studio
+const DIALS = {
+  cells: { v: 64,  min: 36,  max: 110, step: 2 },     // mark resolution — chunkiness
+  grain: { v: 1,   min: 0.4, max: 2,   step: 0.05 },  // swarm density
+  size:  { v: 1,   min: 0.5, max: 2,   step: 0.05 },  // block fill vs its cell
+  tempo: { v: 2,   min: 0.5, max: 4,   step: 0.1 },   // higher = slower, like the site
+  chaos: { v: 1.4, min: 0,   max: 3,   step: 0.05 },
+  snap:  { v: 0,   min: 0,   max: 1,   step: 0.05 },  // 0 glide … 1 cell-stepped like the 2d mesh
+  holo:  { v: 1,   min: 0,   max: 2,   step: 0.05 },
+};
+const P = {};
+try { Object.assign(P, JSON.parse(localStorage.getItem('ency_lab_dials') || '{}')); } catch (e) {}
+for (const k in DIALS) if (typeof P[k] !== 'number' || !isFinite(P[k])) P[k] = DIALS[k].v;
+function saveP(){ try { localStorage.setItem('ency_lab_dials', JSON.stringify(P)); } catch (e) {} }
 
 // ---------- glyph atlas: the blocks ramp, white on transparent
-// the blocks ramp drawn as pixel dither patterns — exact tile coverage, hard edges
+// drawn as pixel dither patterns — exact tile coverage, hard edges
 const GN = 6, GS = 64, PC = 8;             // 8x8 pattern cells per tile
 const ac = document.createElement('canvas'); ac.width = GN * GS; ac.height = GS;
 const ag = ac.getContext('2d');
@@ -74,32 +80,6 @@ for (let i = 0; i < GN; i++)
 const atlas = new THREE.CanvasTexture(ac);
 atlas.minFilter = THREE.NearestFilter; atlas.magFilter = THREE.NearestFilter;
 
-// ---------- instanced geometry: one quad per grain, everything else on GPU
-const NU = 240, NV = 60, COUNT = NU * NV;
-const geo = new THREE.InstancedBufferGeometry();
-geo.instanceCount = COUNT;
-geo.setAttribute('corner', new THREE.Float32BufferAttribute([-0.5,-0.5, 0.5,-0.5, -0.5,0.5, 0.5,0.5], 2));
-geo.setIndex([0, 1, 2, 2, 1, 3]);
-const aUV = new Float32Array(COUNT * 2);
-const aTgt = new Float32Array(COUNT * 2);
-const aOrd = new Float32Array(COUNT);
-const aSeed = new Float32Array(COUNT);
-let k = 0;
-for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
-  aUV[k * 2] = i / NU * Math.PI * 2;
-  aUV[k * 2 + 1] = -1 + 2 * j / (NV - 1);
-  const ti = (k * targets.length / COUNT) | 0;
-  aTgt[k * 2] = targets[ti][0];
-  aTgt[k * 2 + 1] = targets[ti][1];
-  aOrd[k] = orders[ti];
-  aSeed[k] = Math.random();
-  k++;
-}
-geo.setAttribute('aUV', new THREE.InstancedBufferAttribute(aUV, 2));
-geo.setAttribute('aTgt', new THREE.InstancedBufferAttribute(aTgt, 2));
-geo.setAttribute('aOrd', new THREE.InstancedBufferAttribute(aOrd, 1));
-geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(aSeed, 1));
-
 const uniforms = {
   uAtlas:  { value: atlas },
   uSpin:   { value: 0 },
@@ -111,13 +91,18 @@ const uniforms = {
   uTwist:  { value: 1 },
   uTime:   { value: 0 },
   uSize:   { value: 0.0244 },
+  uSnap:   { value: 0 },
+  uHolo:   { value: 1 },
+  uCell:   { value: new THREE.Vector2(0.0145, 0.0234) },
+  uHalf:   { value: new THREE.Vector2(WORLD_W / 2, WORLD_H / 2) },
   uInk:    { value: new THREE.Color('#c8c9cc') },
 };
 
 const vert = /* glsl */`
 precision highp float;
 uniform mat4 modelViewMatrix, projectionMatrix;
-uniform float uSpin, uTilt, uRoll, uFront, uBand, uChaos, uTwist, uTime, uSize;
+uniform float uSpin, uTilt, uRoll, uFront, uBand, uChaos, uTwist, uTime, uSize, uSnap;
+uniform vec2 uCell, uHalf;
 attribute vec2 corner, aUV, aTgt;
 attribute float aOrd, aSeed;
 varying vec2 vUV;
@@ -171,13 +156,25 @@ void main(){
   vec3 home = vec3(aTgt, 0.0);
   vec3 pos = mix(Pr, home, mmi);
 
-  // grains sit ON the surface mid-flight, easing flat as they land
-  vec3 ax = normalize(mix(TuR, vec3(1.0, 0.0, 0.0), mmi));
-  vec3 ay = normalize(mix(TvR, vec3(0.0, 1.0, 0.0), mmi));
-  vN = normalize(cross(ax, ay));
+  // snap: quantize flying grains onto the mark's cell grid — the 2d renderer's
+  // stepped motion. Landed grains are already exactly on that grid.
+  if (uSnap > 0.001) {
+    vec2 q = (floor((pos.xy + uHalf) / uCell) + 0.5) * uCell - uHalf;
+    pos.xy = mix(pos.xy, q, uSnap * (1.0 - mmi));
+  }
+
+  // grains sit ON the surface mid-flight, easing flat as they land;
+  // snap also flattens them, since a stepped grain reads as a terminal cell
+  float flatF = max(mmi, uSnap);
+  vec3 ax = normalize(mix(TuR, vec3(1.0, 0.0, 0.0), flatF));
+  vec3 ay = normalize(mix(TvR, vec3(0.0, 1.0, 0.0), flatF));
+
+  // shading always follows the true surface, so the ramp keeps its texture
+  // even when the quads are drawn flat
+  vN = normalize(cross(TuR, TvR));
   vShade = abs(dot(vN, normalize(vec3(0.35, 0.5, 0.79))));
 
-  vec3 world = pos + (corner.x * 0.62 * ax + corner.y * ay) * uSize * (1.0 + 0.12 * aSeed);
+  vec3 world = pos + (corner.x * 0.62 * ax + corner.y * ay) * uSize * (1.0 + 0.12 * aSeed * (1.0 - uSnap));
   vUV = corner + 0.5;
   vP = world;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
@@ -187,6 +184,7 @@ const frag = /* glsl */`
 precision highp float;
 uniform sampler2D uAtlas;
 uniform vec3 uInk;
+uniform float uHolo;
 varying vec2 vUV;
 varying vec3 vN, vP;
 varying float vMmi, vShade;
@@ -214,7 +212,7 @@ void main(){
   vec3 L = normalize(vec3(1.7, 2.0, 2.4) - vP);
   vec3 V = normalize(vec3(0.0, 0.0, 4.2) - vP);
   vec3 H = normalize(L + V);
-  float g = pow(abs(dot(vN, H)), 42.0) * (1.0 - vMmi);
+  float g = pow(abs(dot(vN, H)), 42.0) * (1.0 - vMmi) * uHolo;
   vec3 ink = uInk;
   if (g > 0.10) {
     float wl = 380.0 + 400.0 * fract(vP.x * 1.7 + vP.y * 2.9 + dot(vN, vec3(0.6, 0.3, 0.4)));
@@ -230,16 +228,88 @@ const mat = new THREE.RawShaderMaterial({
   uniforms, vertexShader: vert, fragmentShader: frag,
   transparent: true, depthWrite: false, side: THREE.DoubleSide,
 });
-// RawShaderMaterial needs the matrices declared but three still supplies them
-const mesh = new THREE.Mesh(geo, mat);
-mesh.frustumCulled = false;
 
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
 cam.position.z = 4.2;
-scene.add(mesh);
+let mesh = null;
+
+// ---------- geometry: rasterize the mark at the dialled cell size, one quad
+// per grain, everything else on GPU. Re-run when cells/grain change.
+function rebuild(){
+  const RH = Math.round(P.cells);
+  const ch = WORLD_H / RH;
+  const RW = Math.max(8, Math.round(WORLD_W / (0.62 * ch)));   // cells 0.62 aspect
+  const cw = WORLD_W / RW;
+
+  const rc = document.createElement('canvas'); rc.width = RW; rc.height = RH;
+  const rg = rc.getContext('2d');
+  rg.setTransform(RW / VB[0], 0, 0, RH / VB[1], 0, 0);
+  rg.fillStyle = '#fff';
+  rg.fill(new Path2D(LOGO_D), 'evenodd');
+  const rd = rg.getImageData(0, 0, RW, RH).data;
+  const targets = [];
+  for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) {
+    if (rd[(y * RW + x) * 4 + 3] > 90) {
+      targets.push([
+        ((x + 0.5) / RW - 0.5) * WORLD_W,
+        (0.5 - (y + 0.5) / RH) * WORLD_H,
+      ]);
+    }
+  }
+  // formation order: distance from the top-most target, like the seed sweep
+  const seed = targets.reduce((a, b) => (b[1] > a[1] ? b : a), targets[0]);
+  let maxD = 1e-6;
+  const orders = targets.map(t => {
+    const d = Math.hypot(t[0] - seed[0], t[1] - seed[1]);
+    if (d > maxD) maxD = d;
+    return d;
+  });
+  for (let i = 0; i < orders.length; i++) orders[i] /= maxD;
+
+  const NU = Math.round(240 * P.grain), NV = Math.round(60 * P.grain);
+  const COUNT = NU * NV;
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.instanceCount = COUNT;
+  geo.setAttribute('corner', new THREE.Float32BufferAttribute([-0.5,-0.5, 0.5,-0.5, -0.5,0.5, 0.5,0.5], 2));
+  geo.setIndex([0, 1, 2, 2, 1, 3]);
+  const aUV = new Float32Array(COUNT * 2);
+  const aTgt = new Float32Array(COUNT * 2);
+  const aOrd = new Float32Array(COUNT);
+  const aSeed = new Float32Array(COUNT);
+  let k = 0;
+  for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+    aUV[k * 2] = i / NU * Math.PI * 2;
+    aUV[k * 2 + 1] = -1 + 2 * j / (NV - 1);
+    const ti = (k * targets.length / COUNT) | 0;
+    aTgt[k * 2] = targets[ti][0];
+    aTgt[k * 2 + 1] = targets[ti][1];
+    aOrd[k] = orders[ti];
+    aSeed[k] = Math.random();
+    k++;
+  }
+  geo.setAttribute('aUV', new THREE.InstancedBufferAttribute(aUV, 2));
+  geo.setAttribute('aTgt', new THREE.InstancedBufferAttribute(aTgt, 2));
+  geo.setAttribute('aOrd', new THREE.InstancedBufferAttribute(aOrd, 1));
+  geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(aSeed, 1));
+
+  if (!mesh) {
+    mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    scene.add(mesh);
+  } else {
+    mesh.geometry.dispose();
+    mesh.geometry = geo;
+  }
+  uniforms.uCell.value.set(cw, ch);
+  applySize();
+}
+function applySize(){
+  uniforms.uSize.value = (WORLD_H / Math.round(P.cells)) * 1.04 * P.size;
+}
+rebuild();
 
 function size(){
   renderer.setSize(innerWidth, innerHeight);
@@ -249,12 +319,55 @@ function size(){
 addEventListener('resize', size);
 size();
 
-// ---------- the choreography clock: same phases as the site's mesh
+// ---------- the dial panel
+const panel = document.createElement('div');
+panel.className = 'dials';
+panel.innerHTML = '<div class="top"><span>dials</span><button data-act="fold">hide</button></div>';
+const outs = {}, ins = {};
+for (const k in DIALS) {
+  const d = DIALS[k];
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = '<label>' + k + '</label>' +
+    '<input type="range" min="' + d.min + '" max="' + d.max + '" step="' + d.step + '">' +
+    '<output></output>';
+  ins[k] = row.querySelector('input');
+  outs[k] = row.querySelector('output');
+  ins[k].value = P[k];
+  outs[k].textContent = P[k];
+  ins[k].addEventListener('input', () => {
+    P[k] = parseFloat(ins[k].value);
+    outs[k].textContent = P[k];
+    saveP();
+    if (k === 'cells' || k === 'grain') rebuild();
+    else if (k === 'size') applySize();
+  });
+  panel.appendChild(row);
+}
+const foot = document.createElement('div');
+foot.className = 'foot';
+foot.innerHTML = '<button data-act="reset">reset</button><span class="fps"></span>';
+panel.appendChild(foot);
+document.body.appendChild(panel);
+const fpsEl = panel.querySelector('.fps');
+panel.addEventListener('click', e => {
+  const act = e.target && e.target.dataset && e.target.dataset.act;
+  if (act === 'fold') {
+    panel.classList.toggle('hidden');
+    e.target.textContent = panel.classList.contains('hidden') ? 'show' : 'hide';
+  } else if (act === 'reset') {
+    for (const k in DIALS) { P[k] = DIALS[k].v; ins[k].value = P[k]; outs[k].textContent = P[k]; }
+    saveP(); rebuild();
+  }
+});
+
+// ---------- the choreography clock: same phases as the site's mesh,
+// run on an accumulated sim clock so tempo changes glide instead of jumping
 const SPIN = 2.4, RES = 4.4, HOLD = 3.0, DISS = 3.4, DRIFT = 3.0, REF = 4.4;
 const CYC = HOLD + DISS + DRIFT + REF;
 const T0 = SPIN + RES;
-const start = performance.now();
-let spin = 0.6, last = start;
+let simT = 0, spin = 0.6, last = performance.now();
+let fpsN = 0, fpsT = last;
 
 function cycleM(c){
   if (c < HOLD) return 1;
@@ -265,7 +378,9 @@ function cycleM(c){
 
 function frame(now){
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  const tt = (now - start) / 1000;
+  const sdt = dt / P.tempo;
+  simT += sdt;
+  const tt = simT;
   let m;
   if (tt < SPIN) m = 0;
   else if (tt < T0) m = (tt - SPIN) / RES;
@@ -273,16 +388,23 @@ function frame(now){
   if (window.__hold != null) m = window.__hold;
 
   const sd = (1 - m) * (1 - m);            // the sheet stops as the mark forms
-  spin += dt * 0.7 * sd;
+  spin += sdt * 0.7 * sd;
 
   uniforms.uSpin.value = spin;
   uniforms.uTime.value = tt;
   uniforms.uFront.value = m * (1 + uniforms.uBand.value);
-  uniforms.uChaos.value = 1.4 * Math.min(1, tt / 1.4);   // intro eases in
+  uniforms.uChaos.value = P.chaos * Math.min(1, tt / 1.4);   // intro eases in
+  uniforms.uSnap.value = P.snap;
+  uniforms.uHolo.value = P.holo;
   uniforms.uTilt.value = -0.5 + Math.sin(tt * 0.35) * 0.3 * (1 - m);
   uniforms.uRoll.value = Math.cos(tt * 0.45) * 0.35 * (1 - m);
 
   renderer.render(scene, cam);
+  fpsN++;
+  if (now - fpsT > 1000) {
+    fpsEl.textContent = Math.round(fpsN * 1000 / (now - fpsT)) + ' fps';
+    fpsN = 0; fpsT = now;
+  }
   window.__m = m; window.__tt = tt;
   requestAnimationFrame(frame);
 }
