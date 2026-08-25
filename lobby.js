@@ -330,7 +330,7 @@
     // coordinates above the map: quiet telemetry that scrambles every so
     // often and settles left-to-right into new readings
     var coords = document.createElement('div');
-    coords.style.cssText = 'font:9px/1 ' + MONO + ';letter-spacing:0.18em;color:#5e5e5e;' +
+    coords.style.cssText = 'font:9px/1 ' + MONO + ';letter-spacing:0.18em;color:#ffffff;' +
       'font-variant-numeric:tabular-nums;user-select:none;white-space:pre;';
     wrap.appendChild(coords);
 
@@ -695,8 +695,7 @@
     // ---- coordinates: current reading, scramble window, next-scramble timer
     function makeCoords() {
       return rand(0, 90).toFixed(4) + '°' + (Math.random() < 0.5 ? 'N' : 'S') +
-        '  ' + rand(0, 180).toFixed(4) + '°' + (Math.random() < 0.5 ? 'E' : 'W') +
-        '  ·  drift ' + rand(0, 0.02).toFixed(4);
+        '  ' + rand(0, 180).toFixed(4) + '°' + (Math.random() < 0.5 ? 'E' : 'W');
     }
     var coordTarget = makeCoords(), coordScramT = 0, coordNextT = rand(4, 9);
     coords.textContent = coordTarget;
