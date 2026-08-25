@@ -136,12 +136,22 @@ void main(){
   vMmi = mmi;
 
   vec3 P = ribPt(aUV.x, aUV.y);
-  // the swarm: value-noise scatter that the landing retires
+  // the swarm: value-noise scatter that the landing retires.
+  // coarse billow is sampled at the surface point itself, so neighbouring
+  // grains share their displacement and the sheet deforms as fabric instead
+  // of pulling apart into strings; a fine shimmer rides on top at low weight
   if (uChaos > 0.001) {
     float c = uChaos * (1.0 - mmi);
-    P.x += (vnoise(vec2(aUV.x * 0.7 + uTime * 0.8, aUV.y * 1.1)) - 0.5) * c;
-    P.y += (vnoise(vec2(aUV.x * 0.7 + 9.1, aUV.y * 1.1 + uTime * 0.8)) - 0.5) * c;
-    P.z += (vnoise(vec2(aUV.x * 0.7 + uTime * 0.64, aUV.y * 1.1 + 4.2)) - 0.5) * c * 0.8;
+    vec2 sp = P.xy * 0.8;
+    float bx = vnoise(sp + vec2(uTime * 0.5, 0.0)) - 0.5;
+    float by = vnoise(sp + vec2(9.1, uTime * 0.5)) - 0.5;
+    float bz = vnoise(sp + vec2(uTime * 0.4, 4.2)) - 0.5;
+    float fx = vnoise(vec2(aUV.x * 0.9 + uTime * 0.8, aUV.y * 1.3)) - 0.5;
+    float fy = vnoise(vec2(aUV.x * 0.9 + 9.1, aUV.y * 1.3 + uTime * 0.8)) - 0.5;
+    float fz = vnoise(vec2(aUV.x * 0.9 + uTime * 0.64, aUV.y * 1.3 + 4.2)) - 0.5;
+    P.x += (bx * 0.85 + fx * 0.15) * c;
+    P.y += (by * 0.85 + fy * 0.15) * c;
+    P.z += (bz * 0.85 + fz * 0.15) * c * 0.8;
   }
   P.z *= (1.0 - mmi);                       // the sheet flattens as it lands
 
@@ -268,6 +278,17 @@ function rebuild(){
     return d;
   });
   for (let i = 0; i < orders.length; i++) orders[i] /= maxD;
+  // assign targets in landing order: aOrd is then monotone around the loop,
+  // so the front peels the sheet in one coherent arc instead of tearing it
+  // everywhere at once — while the mark still grows out from its seed.
+  // within each distance ring, sweep by angle so neighbouring grains land
+  // on neighbouring mark cells rather than opposite ends of the ring
+  const ringA = t => Math.atan2(t[1] - seed[1], t[0] - seed[0]);
+  const byOrder = targets.map((_, n) => n).sort((a, b) => {
+    const qa = Math.round(orders[a] * 28), qb = Math.round(orders[b] * 28);
+    if (qa !== qb) return qa - qb;
+    return ringA(targets[a]) - ringA(targets[b]);
+  });
 
   const NU = Math.round(240 * P.grain), NV = Math.round(60 * P.grain);
   const COUNT = NU * NV;
@@ -283,7 +304,7 @@ function rebuild(){
   for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
     aUV[k * 2] = i / NU * Math.PI * 2;
     aUV[k * 2 + 1] = -1 + 2 * j / (NV - 1);
-    const ti = (k * targets.length / COUNT) | 0;
+    const ti = byOrder[(k * targets.length / COUNT) | 0];
     aTgt[k * 2] = targets[ti][0];
     aTgt[k * 2 + 1] = targets[ti][1];
     aOrd[k] = orders[ti];
