@@ -340,7 +340,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,settle=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -483,12 +483,31 @@
       ctx.drawImage(bgCv, 0, 0, W, H);
     }
 
-    // ---- mark layer: every frame, live text at true sub-pixel positions —
-    // the original renderer. The seams between landed blocks are closed by
-    // the font itself (a hair over cell height), so the resting mark reads
-    // as one merged silhouette while every cell keeps its idle ripple. No
-    // weld state, no depth buckets, nothing to snap: what forms is what
-    // rests, and what rests is still alive.
+    // ---- the settle: once the mark lands, the original vector edge fades
+    // in UNDER the blocks — same ink, so it only shows where the blocks
+    // aren't: the stair-step gaps along the silhouette. The blocks never
+    // change, so nothing can snap; the outline just smooths into the drawn
+    // logo, and the ripple calms on the same clock. On dissolve it recedes
+    // before anything moves.
+    var sTarget=m>0.995?1:0;
+    if(reduce) settle=sTarget;
+    else settle += (sTarget-settle)*Math.min(1, dt*(sTarget?1.4:3.5));
+    var settleA=settle<0.01?0:settle>0.99?1:settle;
+    if(settleA>0.001 && logoPath){
+      ctx.save();
+      ctx.globalAlpha=settleA;
+      ctx.fillStyle=state.ink;
+      ctx.translate(fitX+driftX, fitY+bobY);
+      ctx.scale(fitS,fitS);
+      ctx.fill(logoPath,'evenodd');
+      ctx.restore();
+      ctx.globalAlpha=1;
+    }
+    var ripAmt=RIP*(1-settleA*0.65);   // the blocks calm as the edge settles
+
+    // ---- mark layer: every frame, live glyphs at full strength — the
+    // original renderer. Seams between landed blocks are closed by the font
+    // itself (a hair over cell height); the interior texture never dims.
     for(var gy=0;gy<rows;gy++){
       for(var gx=0;gx<cols;gx++){
         var idx=gy*cols+gx, ribB=rib[idx];
@@ -496,8 +515,8 @@
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
         if(alpha<0.055) continue;
-        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*RIP*idle + dispX[idx];
-        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*RIP*0.8*idle + dispY[idx];
+        var dx=hx + driftX + Math.sin(idlePhase*1.3 + hx*0.026 + hy*0.02)*ripAmt*idle + dispX[idx];
+        var dy=hy + bobY   + Math.cos(idlePhase*1.1 + hy*0.03 - hx*0.014)*ripAmt*0.8*idle + dispY[idx];
         var val=ribB>1?1:ribB;
         var ci=Math.round(val*RL); if(ci<0)ci=0; if(ci>RL)ci=RL;
         var ch=ramp.charAt(ci); if(ch===' ') continue;
