@@ -268,12 +268,13 @@
 
   // p = overall reflow progress 0..1 (0 = pure spinning ribbon, 1 = fully-formed mark)
   var HOLO_EXP=11.0;   // angular tolerance of the catch, set from holoWide each frame
-  function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt){
-    for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;glint[i]=0;}
+  function renderRibbon(spin,tilt,roll,tw,p,tsec,chaosAmt,Wp){
+    for(var i=0;i<zbuf.length;i++){zbuf[i]=1e9;rib[i]=0;glint[i]=0;weldBuf[i]=0;}
     var N=700,M=56,du=6.2832/N,dv=2/(M-1),D=3.7,K=N*M; // dense enough to fill even extreme detail without gaps
     // a forming FRONT sweeps out from the seed point (targets ordered by distance = TF).
     // Trail tightens the front → a narrow wave that draws the mark from the seed outward.
     var BAND=0.14+(1-state.trail)*0.95, front=p*(1+BAND);
+    var wBand=BAND*0.9;   // the weld is a second front of the same family, see frame()
     var k=-1;
     for(var i=0;i<N;i++){
       var uu=i*du;
@@ -283,6 +284,8 @@
         var trank = TN? (k*TN/K)|0 : 0; if(trank>=TN) trank=TN-1;
         var orderFrac = TN? (mp.write? TW[trank] : TF[trank]) : 0;   // this cycle's order: pen-write or seed-sweep
         var mmi=(front-orderFrac)/BAND; mmi=mmi<0?0:mmi>1?1:mmi; mmi=smoother(mmi);
+        // the weld front: same stagger order, same band shape, its own sweep
+        var wmi=Wp>0?(Wp-orderFrac)/wBand:0; wmi=wmi<0?0:wmi>1?1:wmi; if(wmi>0&&wmi<1)wmi=smoother(wmi);
         var zScale=1-mmi;
         var vv=-1+j*dv;
         var q=ribPt(uu,vv,tw);
@@ -314,6 +317,7 @@
           var depth=Math.max(0.18,Math.min(1,(D+1.7-pz)/2.4));
           var rb=(0.30+0.70*diff)*depth;
           rib[idx]=rb*(1-mmi)+mmi;   // shading → solid ink as it lands
+          weldBuf[idx]=wmi;          // how far the weld front has passed this cell
           // Holo only fires when the surface catches the lamp. A tight lobe on
           // the 3D normal makes that a brief flash as the ribbon turns through
           // the angle, and (1-mmi) retires it per character as it lands — so a
@@ -344,7 +348,7 @@
   }
   function cycLen(){ return HOLD+DISS+state.ambient+REF; }
 
-  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0;
+  var raf=0,running=false,start=0,spinAngle=0.6,lastNow=0,idlePhase=0,cyclePhase=0,loopStarted=false,chaosT=0,wAcc=0;
   var mx=-1e5,my=-1e5,pmx=-1e5,pmy=-1e5,mAmt=0,mTarget=0,dispX,dispY;  // cursor pos+prev, influence, per-grain displacement
   var lastMove=-1e9;
   sheet.addEventListener('pointermove',function(e){ var r=cv.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; mTarget=1; lastMove=performance.now(); });
@@ -398,7 +402,24 @@
     var roll=mp.rz*(1-m*0.9)   + Math.cos(chaosT*0.9)*0.35*effChaos*(1-m);
     var tw = state.random ? mp.tw : state.twist;   // random mode varies the mesh per loop
     HOLO_EXP=2.0+(1.0-state.holoWide)*26.0;   // 28 = tight/rare, 2 = broad
-    renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos);   // swarm scatters, then reflows into the strokes
+    // The weld front runs ONLY while the mark is provably still (the hold):
+    // it sweeps in across the first stretch of the hold, plateaus, and
+    // sweeps back out before the dissolve is scheduled — so a welded cell
+    // can never be a moving cell, and the sweep uses the morph's own
+    // stagger, so it reads as the same gesture completing itself.
+    var BANDf=0.14+(1-state.trail)*0.95;
+    var Wn=0;
+    if(reduce) Wn=1;
+    else if(state.loop){
+      if(loopStarted && cyclePhase<HOLD){
+        var wr=HOLD*0.35;
+        Wn=Math.min(cyclePhase/wr,(HOLD-cyclePhase)/wr); if(Wn>1)Wn=1; if(Wn<0)Wn=0;
+      }
+    } else if(m>=1){
+      wAcc+=dt/(1.2*state.tempo); if(wAcc>1)wAcc=1; Wn=wAcc;
+    } else wAcc=0;
+    var Wp=smoother(Wn)*(1+BANDf*0.9);
+    renderRibbon(spinAngle,tilt,roll,tw,m,idlePhase,effChaos,Wp);   // swarm scatters, then reflows into the strokes
     var flowT=now/1000*0.35;
     var ramp=RAMPS[state.charset], RL=ramp.length-1;
     // How much the ambient field steps back as the mark lands. At 1 the backdrop
@@ -487,21 +508,16 @@
       ctx.drawImage(bgCv, 0, 0, W, H);
     }
 
-    // ---- mark layer: live glyphs at true sub-pixel positions, and the weld
-    // as part of the same gesture. Each cell's weld level rises the moment
-    // ITS grain has fully landed (rib hits exactly 1 only then) and falls
-    // the moment its grain begins to lift — so fusion sweeps across the mark
-    // in the same order and rhythm as the morph front itself. A welded cell
-    // fattens into a full block that bleeds into its neighbours, its ripple
-    // calming as it sets. No global clock, no second rendering: the mesh's
-    // own motion drives the smoothing.
-    var wRate=reduce?1:Math.min(1, dt*3.5);
+    // ---- mark layer: live glyphs at true sub-pixel positions. The weld
+    // level arrives per-cell from the rasteriser: a second front of the same
+    // wave family, sweeping the mark in the morph's own stagger order while
+    // everything is still. A welded cell fattens into a full block that
+    // bleeds into its neighbours, its ripple calming as it sets.
     for(var gy=0;gy<rows;gy++){
       for(var gx=0;gx<cols;gx++){
         var idx=gy*cols+gx, ribB=rib[idx];
+        if(ribB<=0.02) continue;
         var wl=weldBuf[idx];
-        if(ribB<=0.02){ if(wl>0.001) weldBuf[idx]=wl*(1-wRate); continue; }
-        wl+=((ribB>=0.9995?1:0)-wl)*wRate; weldBuf[idx]=wl;
         var hx=gx*cellW, hy=gy*cellH;
         var alpha=ribB;
         if(alpha<0.055) continue;
