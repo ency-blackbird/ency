@@ -94,6 +94,7 @@ const uniforms = {
   uSnap:   { value: 0 },
   uHolo:   { value: 1 },
   uCell:   { value: new THREE.Vector2(0.0145, 0.0234) },
+  uStep:   { value: new THREE.Vector2(Math.PI * 2 / 240, 2 / 59) },
   uHalf:   { value: new THREE.Vector2(WORLD_W / 2, WORLD_H / 2) },
   uInk:    { value: new THREE.Color('#c8c9cc') },
 };
@@ -102,14 +103,18 @@ const vert = /* glsl */`
 precision highp float;
 uniform mat4 modelViewMatrix, projectionMatrix;
 uniform float uSpin, uTilt, uRoll, uFront, uBand, uChaos, uTwist, uTime, uSize, uSnap;
-uniform vec2 uCell, uHalf;
+uniform vec2 uCell, uHalf, uStep;
 attribute vec2 corner, aUV, aTgt;
 attribute float aOrd, aSeed;
 varying vec2 vUV;
 varying vec3 vN, vP;
 varying float vMmi, vShade;
 
-float hashN(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float hashN(vec2 p){
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
 float vnoise(vec2 p){
   vec2 i = floor(p), f = fract(p);
   vec2 u = f * f * (3.0 - 2.0 * f);
@@ -131,60 +136,77 @@ vec3 rotAll(vec3 p){
 }
 float smoother(float t){ t = clamp(t, 0.0, 1.0); return t * t * t * (t * (t * 6.0 - 15.0) + 10.0); }
 
-void main(){
-  float mmi = smoother((uFront - aOrd) / uBand);
-  vMmi = mmi;
-
-  vec3 P = ribPt(aUV.x, aUV.y);
-  // the swarm: value-noise scatter that the landing retires.
-  // coarse billow is sampled at the surface point itself, so neighbouring
-  // grains share their displacement and the sheet deforms as fabric instead
-  // of pulling apart into strings; a fine shimmer rides on top at low weight
-  if (uChaos > 0.001) {
-    float c = uChaos * (1.0 - mmi);
+// the deformed sheet: ribbon surface plus the swarm displacement.
+// coarse billow is sampled at the surface point itself, so neighbouring
+// grains share their displacement and the sheet deforms as fabric instead
+// of pulling apart into strings; a fine shimmer rides on top at low weight
+vec3 sheetPt(vec2 uv, float c, vec3 fine){
+  vec3 P = ribPt(uv.x, uv.y);
+  if (c > 0.001) {
     vec2 sp = P.xy * 0.8;
     float bx = vnoise(sp + vec2(uTime * 0.5, 0.0)) - 0.5;
     float by = vnoise(sp + vec2(9.1, uTime * 0.5)) - 0.5;
     float bz = vnoise(sp + vec2(uTime * 0.4, 4.2)) - 0.5;
-    float fx = vnoise(vec2(aUV.x * 0.9 + uTime * 0.8, aUV.y * 1.3)) - 0.5;
-    float fy = vnoise(vec2(aUV.x * 0.9 + 9.1, aUV.y * 1.3 + uTime * 0.8)) - 0.5;
-    float fz = vnoise(vec2(aUV.x * 0.9 + uTime * 0.64, aUV.y * 1.3 + 4.2)) - 0.5;
-    P.x += (bx * 0.85 + fx * 0.15) * c;
-    P.y += (by * 0.85 + fy * 0.15) * c;
-    P.z += (bz * 0.85 + fz * 0.15) * c * 0.8;
+    P.x += (bx * 0.85 + fine.x) * c;
+    P.y += (by * 0.85 + fine.y) * c;
+    P.z += (bz * 0.85 + fine.z) * c * 0.8;
   }
-  P.z *= (1.0 - mmi);                       // the sheet flattens as it lands
+  return P;
+}
 
-  // surface tangents for true grain orientation
-  float e = 0.012;
-  vec3 Tu = normalize(ribPt(aUV.x + e, aUV.y) - ribPt(aUV.x - e, aUV.y));
-  vec3 Tv = normalize(ribPt(aUV.x, aUV.y + e) - ribPt(aUV.x, aUV.y - e));
+void main(){
+  float mmi = smoother((uFront - aOrd) / uBand);
+  vMmi = mmi;
 
-  vec3 Pr = rotAll(P);
-  vec3 TuR = rotAll(Tu), TvR = rotAll(Tv);
+  // this grain's cell of the deformed sheet: the quad spans the edge vectors
+  // to its parametric neighbours, so blocks stretch and shear WITH the fabric
+  // and the sheet stays tiled — attached — under any amount of chaos
+  float c = uChaos * (1.0 - mmi);
+  // fine shimmer varies slowly across one cell — sample it once, share it
+  vec3 fine = vec3(0.0);
+  if (c > 0.001) {
+    fine = 0.15 * (vec3(
+      vnoise(vec2(aUV.x * 0.9 + uTime * 0.8, aUV.y * 1.3)),
+      vnoise(vec2(aUV.x * 0.9 + 9.1, aUV.y * 1.3 + uTime * 0.8)),
+      vnoise(vec2(aUV.x * 0.9 + uTime * 0.64, aUV.y * 1.3 + 4.2))) - 0.5);
+  }
+  vec3 P0 = sheetPt(aUV, c, fine);
+  vec3 P1 = sheetPt(aUV + vec2(uStep.x, 0.0), c, fine);
+  vec3 P2 = sheetPt(aUV + vec2(0.0, uStep.y), c, fine);
+  float squash = 1.0 - mmi;                 // the sheet flattens as it lands
+  P0.z *= squash; P1.z *= squash; P2.z *= squash;
+
+  vec3 Pr  = rotAll(P0);
+  vec3 axF = rotAll(P1) - Pr;
+  vec3 ayF = rotAll(P2) - Pr;
 
   vec3 home = vec3(aTgt, 0.0);
   vec3 pos = mix(Pr, home, mmi);
 
-  // snap: quantize flying grains onto the mark's cell grid — the 2d renderer's
-  // stepped motion. Landed grains are already exactly on that grid.
+  // snap: a continuous staircase toward the mark's cell grid — motion dwells
+  // on cells and hops between them, but the mapping has no jumps, so the
+  // sheet never cracks at partial snap. Landed grains sit on plateaus already.
   if (uSnap > 0.001) {
-    vec2 q = (floor((pos.xy + uHalf) / uCell) + 0.5) * uCell - uHalf;
-    pos.xy = mix(pos.xy, q, uSnap * (1.0 - mmi));
+    vec2 h = (pos.xy + uHalf) / uCell - 0.5;
+    vec2 fh = fract(h);
+    vec2 sq = smoothstep(vec2(0.32), vec2(0.68), fh);
+    pos.xy = (floor(h) + mix(fh, sq, uSnap) + 0.5) * uCell - uHalf;
   }
 
-  // grains sit ON the surface mid-flight, easing flat as they land;
-  // snap also flattens them, since a stepped grain reads as a terminal cell
-  float flatF = max(mmi, uSnap);
-  vec3 ax = normalize(mix(TuR, vec3(1.0, 0.0, 0.0), flatF));
-  vec3 ay = normalize(mix(TvR, vec3(0.0, 1.0, 0.0), flatF));
-
-  // shading always follows the true surface, so the ramp keeps its texture
-  // even when the quads are drawn flat
-  vN = normalize(cross(TuR, TvR));
+  // shading follows the deformed surface, so the ramp keeps its texture
+  vN = normalize(cross(axF, ayF));
   vShade = abs(dot(vN, normalize(vec3(0.35, 0.5, 0.79))));
 
-  vec3 world = pos + (corner.x * 0.62 * ax + corner.y * ay) * uSize * (1.0 + 0.12 * aSeed * (1.0 - uSnap));
+  // grains tile the sheet mid-flight, easing to upright mark cells as they
+  // land; snap steps the position but the block keeps hugging the surface,
+  // so coverage never opens up
+  float fill = uSize / uCell.y;             // the size dial as fill fraction
+  float flatF = mmi;
+  float jit = 1.0 + 0.12 * aSeed * (1.0 - uSnap);
+  vec3 ax = mix(axF * fill, vec3(uSize * 0.62, 0.0, 0.0), flatF) * jit;
+  vec3 ay = mix(ayF * fill, vec3(0.0, uSize, 0.0), flatF) * jit;
+
+  vec3 world = pos + corner.x * ax + corner.y * ay;
   vUV = corner + 0.5;
   vP = world;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
@@ -325,6 +347,7 @@ function rebuild(){
     mesh.geometry = geo;
   }
   uniforms.uCell.value.set(cw, ch);
+  uniforms.uStep.value.set(Math.PI * 2 / NU, 2 / (NV - 1));
   applySize();
 }
 function applySize(){
