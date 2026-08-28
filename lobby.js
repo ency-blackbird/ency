@@ -354,7 +354,12 @@
       'font-variant-numeric:tabular-nums;';
     timer.appendChild(timerDate);
     timer.appendChild(timerClock);
-    wrap.appendChild(timer);
+    // the timer sits centered in a full-width row so the thumb buttons can
+    // hang off its right edge on touch screens
+    var bottomRow = document.createElement('div');
+    bottomRow.style.cssText = 'position:relative;width:100%;display:flex;justify-content:center;';
+    bottomRow.appendChild(timer);
+    wrap.appendChild(bottomRow);
 
     var cv = document.createElement('canvas');
     cv.width = W * S; cv.height = H * S;
@@ -389,19 +394,45 @@
     sizeFx();
     addEventListener('resize', sizeFx);
 
-    // on touch screens, carrying a gun grows a one-tap drop chip — every
-    // gesture stays a tap (long-press already belongs to the fog stream)
-    var dropBtn = document.createElement('div');
-    dropBtn.style.cssText = 'position:absolute;right:7px;bottom:7px;display:none;' +
-      'font:9px/1 ' + MONO + ';letter-spacing:0.18em;color:#d0d0d0;' +
-      'background:#2a2a2a;border:1px solid #454545;border-radius:2px;' +
-      'padding:5px 7px 4px;box-shadow:1px 1px 0 rgba(0,0,0,0.45);cursor:pointer;';
-    dropBtn.textContent = 'drop';
-    panel.appendChild(dropBtn);
-    dropBtn.addEventListener('pointerdown', function (e) {
-      e.stopPropagation();
-      tryDrop();
+    // on touch screens the verbs live on two game-boy buttons beside the
+    // timer — A fires or takes, B hugs or dances, both together drop — and
+    // the map itself stays a pure walking surface
+    function gbBtn(letter) {
+      var b = document.createElement('div');
+      b.style.cssText = 'position:relative;width:38px;height:38px;border-radius:50%;' +
+        'background:#2a2a2a;border:1px solid #454545;box-shadow:1px 1px 0 rgba(0,0,0,0.45);' +
+        'color:#d0d0d0;font:700 12px/36px ' + MONO + ';text-align:center;' +
+        'cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;';
+      b.textContent = letter;
+      var lab = document.createElement('div');
+      lab.style.cssText = 'position:absolute;top:100%;left:50%;transform:translateX(-50%);' +
+        'margin-top:4px;font:8px/1 ' + MONO + ';letter-spacing:0.16em;color:#6e6e6e;white-space:nowrap;';
+      b.appendChild(lab);
+      b._lab = lab;
+      return b;
+    }
+    var abRow = document.createElement('div');
+    abRow.style.cssText = 'position:absolute;right:4px;top:50%;transform:translateY(-58%);' +
+      'display:none;gap:7px;align-items:flex-start;';
+    var btnB = gbBtn('B'), btnA = gbBtn('A');
+    btnB.style.marginTop = '12px';           // the game-boy diagonal
+    abRow.appendChild(btnB);
+    abRow.appendChild(btnA);
+    bottomRow.appendChild(abRow);
+    var aDown = false, bDown = false;
+    btnA.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); aDown = true;
+      if (bDown && you.gun) { tryDrop(); cHeld = false; return; }
+      tryGun(); cHeld = true;                // holding A streams the fog gun
+      if (navigator.vibrate) navigator.vibrate(8);
     });
+    btnB.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); bDown = true;
+      if (aDown && you.gun) { tryDrop(); cHeld = false; return; }
+      if (nearestStranger(1.4)) tryHug(); else tryDance();
+      if (navigator.vibrate) navigator.vibrate(4);
+    });
+    addEventListener('pointerup', function () { aDown = false; bDown = false; });
 
     // the action nudge — crisp DOM text floated over the map, never canvas
     var tipEl = document.createElement('div');
@@ -664,21 +695,25 @@
       var tx = (e.clientX - r.left) / r.width * W;
       var ty = (e.clientY - r.top) / r.height * H;
 
-      // taps can do what X and C do: hug a neighbor, take a musket, fire
-      var s = nearestStranger(1.4);
-      if (s && Math.hypot(s.x - tx, s.y - ty) < 0.9) { tryHug(); return; }
-      if (!you.gun) {
-        for (var ri = 0; ri < RACKS.length; ri++) {
-          var rk = RACKS[ri];
-          if (!rk.taken && Math.hypot(rk.x - tx, rk.y - ty) < 1 &&
-              Math.hypot(rk.x - you.x, rk.y - you.y) < 1.8) { tryGun(); return; }
+      // with a mouse, clicks can do what X and C do: hug a neighbor, take a
+      // musket, fire. On touch the A/B buttons own the verbs and the map is
+      // purely for walking — no more mis-taps that stroll instead of shoot.
+      if (!touch) {
+        var s = nearestStranger(1.4);
+        if (s && Math.hypot(s.x - tx, s.y - ty) < 0.9) { tryHug(); return; }
+        if (!you.gun) {
+          for (var ri = 0; ri < RACKS.length; ri++) {
+            var rk = RACKS[ri];
+            if (!rk.taken && Math.hypot(rk.x - tx, rk.y - ty) < 1 &&
+                Math.hypot(rk.x - you.x, rk.y - you.y) < 1.8) { tryGun(); return; }
+          }
+        } else if (Math.hypot(you.x - tx, you.y - ty) < 1) {
+          tryGun();
+          if (you.gun === 'fog') cHeld = true;  // press-and-hold streams; pointerup releases
+          return;
         }
-      } else if (Math.hypot(you.x - tx, you.y - ty) < 1) {
-        tryGun();
-        if (you.gun === 'fog') cHeld = true;    // press-and-hold streams; pointerup releases
-        return;
+        if (!you.gun && Math.hypot(you.x - tx, you.y - ty) < 1) { tryDance(); return; } // tap yourself: dance
       }
-      if (!you.gun && Math.hypot(you.x - tx, you.y - ty) < 1) { tryDance(); return; }   // tap yourself: dance
 
       if (!walkable(tx, ty)) {           // tapped a wall or the void → nearest floor
         var best = null, bd = 1e9;
@@ -1065,20 +1100,20 @@
       // then never again this visit
       var tip = null;
       var ns = you.busy <= 0 && hugCd <= 0 ? nearestStranger(1.4) : null;
-      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: touch ? 'tap · hug' : 'x · hug\nv · dance' };
+      if (ns) tip = { k: 'hug', x: ns.x, y: ns.y - 1.1, s: touch ? 'b · hug' : 'x · hug\nv · dance' };
       else if (!you.gun) {
         for (var tg = 0; tg < floorGuns.length && !tip; tg++) {
           var tfg = floorGuns[tg];
           if (Math.hypot(tfg.x - you.x, tfg.y - you.y) < 1.4)
-            tip = { k: 'take', x: tfg.x, y: tfg.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
+            tip = { k: 'take', x: tfg.x, y: tfg.y - 0.9, s: (touch ? 'a' : 'c') + ' · take' };
         }
         for (var ti = 0; ti < RACKS.length && !tip; ti++) {
           var tr = RACKS[ti];
           if (!tr.taken && Math.hypot(tr.x - you.x, tr.y - you.y) < 1.8)
-            tip = { k: 'take', x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'tap' : 'c') + ' · take' };
+            tip = { k: 'take', x: tr.x + tr.side * 0.8, y: tr.y - 0.9, s: (touch ? 'a' : 'c') + ' · take' };
         }
       } else if (gunHintT > 0) {
-        tip = { k: 'fire', x: you.x, y: you.y - 1.2, s: touch ? 'tap · fire' : 'c · fire\nz · drop' };
+        tip = { k: 'fire', x: you.x, y: you.y - 1.2, s: touch ? 'a · fire\na+b · drop' : 'c · fire\nz · drop' };
       }
       if (tip && !tipSeen[tip.k]) {
         tipSeen[tip.k] = true;                   // one flash, then it's yours
@@ -1090,7 +1125,11 @@
         tipEl.style.top = (tip.y / H * 100) + '%';
       }
       tipEl.style.opacity = tipFlashT > 0 ? '1' : '0';
-      dropBtn.style.display = (touch && you.gun) ? 'block' : 'none';
+      abRow.style.display = touch ? 'flex' : 'none';
+      if (touch) {
+        btnA._lab.textContent = you.gun ? 'fire' : 'take';
+        btnB._lab.textContent = nearestStranger(1.4) ? 'hug' : 'dance';
+      }
 
       // confetti — foil, not crayon: every fleck samples the same desaturated
       // diffraction field as the rest of the site, shimmering as it tumbles
