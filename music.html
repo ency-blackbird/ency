@@ -22,23 +22,60 @@
   <section class="sect">
     <h2>ARMORY01</h2>
     <div class="rule"></div>
-    <div class="grid" id="armory01"></div>
+
+    <!-- six slots; each becomes a record when there is one to put in it.
+         Static markup on purpose — <main> is swapped in by the router, and
+         injected scripts would not run. -->
+    <div class="grid">
+      <article class="card">
+        <div class="veil" aria-hidden="true">
+          <span class="blob b1"></span><span class="blob b2"></span>
+          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
+        </div>
+        <div class="soon">coming soon</div>
+      </article>
+      <article class="card">
+        <div class="veil" aria-hidden="true">
+          <span class="blob b1"></span><span class="blob b2"></span>
+          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
+        </div>
+        <div class="soon">coming soon</div>
+      </article>
+      <article class="card">
+        <div class="veil" aria-hidden="true">
+          <span class="blob b1"></span><span class="blob b2"></span>
+          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
+        </div>
+        <div class="soon">coming soon</div>
+      </article>
+      <article class="card">
+        <div class="veil" aria-hidden="true">
+          <span class="blob b1"></span><span class="blob b2"></span>
+          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
+        </div>
+        <div class="soon">coming soon</div>
+      </article>
+      <article class="card">
+        <div class="veil" aria-hidden="true">
+          <span class="blob b1"></span><span class="blob b2"></span>
+          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
+        </div>
+        <div class="soon">coming soon</div>
+      </article>
+      <article class="card">
+        <div class="veil" aria-hidden="true">
+          <span class="blob b1"></span><span class="blob b2"></span>
+          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
+        </div>
+        <div class="soon">coming soon</div>
+      </article>
+    </div>
   </section>
 </main>
 
 <script src="/ribbon.js"></script>
 <script src="/page.js"></script>
 <script>
-  // six placeholders — one card per slot until the slot has a record in it
-  document.getElementById('armory01').innerHTML = Array.from({ length: 6 }, () =>
-    '<article class="card">' +
-      '<div class="veil" aria-hidden="true">' +
-        '<span class="blob b1"></span><span class="blob b2"></span>' +
-        '<span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>' +
-      '</div>' +
-      '<div class="soon">coming soon</div>' +
-    '</article>').join('');
-
   encyChrome({ current: 'music' });
   encyBackdrop(document.getElementById('cv'), document.getElementById('bg'));
 </script>

@@ -49,8 +49,14 @@ body {
 }
 .nav a:hover, .nav a:focus-visible { color: var(--ink); }
 .nav a.on { color: var(--ink); }
-.nav a.home { color: var(--faint); letter-spacing: 0.24em; margin-bottom: 4px; }
-.nav a.home:hover { color: var(--dim); }
+.nav a.back {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--faint);
+  margin-bottom: 7px;
+  padding: 2px 0;
+}
+.nav a.back:hover, .nav a.back:focus-visible { color: var(--ink); }
 
 /* --- page body --- */
 
@@ -89,6 +95,7 @@ main {
   display: grid;
   gap: 14px;
   grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  perspective: 900px;
 }
 .grid.two { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 
@@ -102,7 +109,13 @@ main {
   backdrop-filter: blur(16px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   display: grid; place-items: center;
+  transform-style: preserve-3d;
+  will-change: transform;
+  /* the follow is damped, so the lean trails the cursor rather than snapping */
+  transition: transform 190ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 190ms ease;
 }
+.card:hover { border-color: rgba(255, 255, 255, 0.2); }
 .grid.two .card { aspect-ratio: 16 / 10; }
 
 /* the smeared "content" underneath — never legible, just present */
@@ -138,34 +151,26 @@ main {
 
 .links {
   position: fixed;
-  right: 18px;
-  bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  right: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
   z-index: 3;
   display: flex;
-  gap: 8px;
+  gap: 16px;
 }
 .links a {
-  width: 29px; height: 29px;
+  width: 26px; height: 26px;          /* bare marks, but still a real target */
   display: grid; place-items: center;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   color: var(--faint);
-  transition: color 160ms ease, border-color 160ms ease;
+  transition: color 160ms ease;
 }
-.links a:hover, .links a:focus-visible {
-  color: var(--ink);
-  border-color: rgba(255, 255, 255, 0.22);
-}
-.links svg { width: 13px; height: 13px; }
+.links a:hover, .links a:focus-visible { color: var(--ink); }
+.links svg { width: 16px; height: 16px; }
 
 :focus-visible { outline: 1px solid rgba(255,255,255,0.5); outline-offset: 2px; }
 
 @media (max-width: 560px) {
   main { padding: 164px 18px 128px; }
-  .links { right: 14px; }
+  .links { right: 16px; gap: 15px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; }

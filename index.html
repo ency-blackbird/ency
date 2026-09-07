@@ -164,34 +164,27 @@
 
   .links {
     position: fixed;
-    right: 18px;
-    bottom: max(18px, env(safe-area-inset-bottom, 0px));
+    right: 20px;
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
     z-index: 3;
     display: flex;
-    gap: 8px;
+    gap: 16px;
   }
   .links a {
-    width: 29px; height: 29px;
+    width: 26px; height: 26px;          /* bare marks, but still a real target */
     display: grid; place-items: center;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 9px;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     color: var(--faint);
-    transition: color 160ms ease, border-color 160ms ease;
+    transition: color 160ms ease;
   }
-  .links a:hover, .links a:focus-visible {
-    color: var(--ink);
-    border-color: rgba(255, 255, 255, 0.22);
-  }
-  .links svg { width: 13px; height: 13px; }
+  .links a:hover, .links a:focus-visible { color: var(--ink); }
+  .links svg { width: 16px; height: 16px; }
 
   /* narrow screens: the centred field owns the bottom edge, so the row
      sits just above it rather than fighting it for the corner */
   @media (max-width: 560px) {
     .links {
-      right: 14px;
+      right: 16px;
+      gap: 15px;
       bottom: calc(max(38px, env(safe-area-inset-bottom, 0px)) + 96px);
     }
   }
