@@ -227,6 +227,9 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/lab') return serveFile(res, 'lab.html');   // mesh v2 prototype, unlisted
 
+    if (p === '/tools' || p === '/tools.html') return serveFile(res, 'tools.html');
+    if (p === '/music' || p === '/music.html') return serveFile(res, 'music.html');
+
     if (p === '/studio' || p === '/studio.html') {
       if (!authed(req)) { res.writeHead(302, { Location: '/' }); return res.end(); }
       return serveFile(res, 'studio.html');
