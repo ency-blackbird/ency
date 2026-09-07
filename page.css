@@ -106,10 +106,7 @@ main {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
   display: grid; place-items: center;
-  transform-style: preserve-3d;
   will-change: transform;
   /* the follow is damped, so the lean trails the cursor rather than snapping */
   transition: transform 190ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -121,6 +118,8 @@ main {
 /* the smeared "content" underneath — never legible, just present */
 .veil {
   position: absolute; inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
   filter: blur(19px);
   opacity: 0.55;
   pointer-events: none;
@@ -155,22 +154,22 @@ main {
   bottom: max(20px, env(safe-area-inset-bottom, 0px));
   z-index: 3;
   display: flex;
-  gap: 16px;
+  gap: 10px;
 }
 .links a {
-  width: 26px; height: 26px;          /* bare marks, but still a real target */
+  width: 30px; height: 30px;          /* bare marks, but still a real target */
   display: grid; place-items: center;
-  color: var(--faint);
+  color: var(--dim);
   transition: color 160ms ease;
 }
 .links a:hover, .links a:focus-visible { color: var(--ink); }
-.links svg { width: 16px; height: 16px; }
+.links svg { width: 19px; height: 19px; }
 
 :focus-visible { outline: 1px solid rgba(255,255,255,0.5); outline-offset: 2px; }
 
 @media (max-width: 560px) {
   main { padding: 164px 18px 128px; }
-  .links { right: 16px; gap: 15px; }
+  .links { right: 16px; gap: 9px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 0.01ms !important; }

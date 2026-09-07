@@ -10,6 +10,7 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/page.css">
 <style>
   /* single, committed theme: the mesh is the page, and it is dark */
   :root {
@@ -140,45 +141,6 @@
   .lock:hover, .lock:focus-visible { color: var(--ink); border-color: rgba(255,255,255,0.22); }
   .lock svg { width: 12px; height: 12px; }
 
-  /* --- nav: sections, mirroring the lock's inset on the other side --- */
-
-  .nav {
-    position: fixed;
-    top: 18px; left: 18px;
-    z-index: 3;
-    display: flex; flex-direction: column;
-    align-items: flex-start;
-    gap: 7px;
-  }
-  .nav a {
-    font: 12px/1 var(--mono);
-    letter-spacing: 0.12em;
-    color: var(--dim);
-    text-decoration: none;
-    padding: 3px 0;
-    transition: color 160ms ease;
-  }
-  .nav a:hover, .nav a:focus-visible { color: var(--ink); }
-
-  /* --- links: the lock's answer, opposite corner --- */
-
-  .links {
-    position: fixed;
-    right: 20px;
-    bottom: max(20px, env(safe-area-inset-bottom, 0px));
-    z-index: 3;
-    display: flex;
-    gap: 16px;
-  }
-  .links a {
-    width: 26px; height: 26px;          /* bare marks, but still a real target */
-    display: grid; place-items: center;
-    color: var(--faint);
-    transition: color 160ms ease;
-  }
-  .links a:hover, .links a:focus-visible { color: var(--ink); }
-  .links svg { width: 16px; height: 16px; }
-
   /* narrow screens: the centred field owns the bottom edge, so the row
      sits just above it rather than fighting it for the corner */
   @media (max-width: 560px) {
@@ -249,6 +211,12 @@
   .modal .go:hover { background: rgba(255, 255, 255, 0.16); }
   .modal .err { font-size: 10px; letter-spacing: 0.1em; color: #d08a8a; min-height: 13px; }
 
+  /* --- a room, open over the gate --- */
+
+  html.room, body.room { overflow: auto; height: auto; }
+  body.room #cv { pointer-events: none; }
+  #cv { transition: filter 700ms ease, opacity 700ms ease; }
+
   :focus-visible { outline: 1px solid rgba(255,255,255,0.5); outline-offset: 2px; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -284,6 +252,8 @@
   <button class="enter" id="enter" hidden>enter room</button>
   <div class="said" id="said" role="status" aria-live="polite"></div>
 </div>
+
+<main id="room" hidden></main>
 
 <div class="scrim" id="scrim">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Studio access">
@@ -358,6 +328,44 @@
   }
 
   enterBtn.addEventListener('click', () => bootLobby(false));
+
+  // The gate is also the shell the rooms open inside. Opening one demotes
+  // this mesh rather than building another — same move bootLobby makes, so
+  // the animation carries straight through instead of restarting. Note that
+  // setState({scale}) only rebuilds the targets; it never calls play(), so
+  // the clock is untouched.
+  let roomScale = null;
+  window.encyGate = {
+    demote() {
+      foot.style.display = 'none';
+      if (lobby && lobby.panel) lobby.panel.style.display = 'none';
+      cv.style.transition = 'filter 700ms ease, opacity 700ms ease';
+      cv.style.filter = 'blur(7px) brightness(0.4)';
+      cv.style.opacity = '0.62';
+      if (ribbon) {
+        if (savedMouse === null) savedMouse = ribbon.getState().mouse;
+        if (roomScale === null) roomScale = ribbon.getState().scale;
+        ribbon.setState({ mouse: 0, scale: 0.5 });
+        ribbon.setPace(2);
+      }
+      document.documentElement.classList.add('room');
+      document.body.classList.add('room');
+    },
+    restore() {
+      document.documentElement.classList.remove('room');
+      document.body.classList.remove('room');
+      if (ribbon) {
+        if (roomScale !== null) ribbon.setState({ scale: roomScale });
+        ribbon.setPace(lobby ? 2 : 1);
+        if (!lobby && savedMouse !== null) ribbon.setState({ mouse: savedMouse });
+      }
+      // the lobby has its own idea of how the mesh should sit behind it
+      cv.style.filter = lobby ? 'blur(4px) brightness(0.55)' : 'none';
+      cv.style.opacity = '1';
+      if (lobby && lobby.panel) lobby.panel.style.display = '';
+      else foot.style.display = '';
+    },
+  };
 
   // Joined once from this device → the panel is already there on arrival.
   const remembered = localStorage.getItem('ency_joined') === '1';

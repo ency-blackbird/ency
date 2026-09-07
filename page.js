@@ -57,10 +57,16 @@
     return html;
   }
 
+  let navEl = null;
+
+  function setNav(current) {
+    if (navEl) navEl.innerHTML = navMarkup(current);
+  }
+
   window.encyChrome = function encyChrome(opts) {
     const current = (opts && opts.current) || null;
 
-    const nav = document.createElement('nav');
+    const nav = navEl = document.createElement('nav');
     nav.className = 'nav';
     nav.setAttribute('aria-label', 'Sections');
     nav.innerHTML = navMarkup(current);
@@ -79,16 +85,19 @@
     document.body.appendChild(nav);
     document.body.appendChild(links);
 
-    if (current) { initRouter(); initTilt(); }
+    // the gate runs the router too — it is the shell the rooms open inside
+    initRouter();
+    initTilt();
   };
 
-  /* ---- soft routing between the interior rooms -----------------------
-   * Moving between tools and music swaps <main> instead of loading a
-   * document, so the mesh behind it is never torn down and rebuilt — the
-   * animation just keeps running. The gate is deliberately excluded: it is a
-   * different page with a different mesh (full size, interactive, and owning
-   * the join flow), so going there stays a real navigation.
-   * Any failure falls through to a normal load. */
+  /* ---- soft routing ---------------------------------------------------
+   * No navigation between the gate and the rooms, or between the rooms, is a
+   * document load — so the canvas is never torn down and the mesh never
+   * restarts. The gate is the shell: opening a room fills its <main> and
+   * demotes its mesh (the blur/dim/half-rate move bootLobby already makes);
+   * closing one puts the gate's furniture back. A room loaded directly is a
+   * standalone page with its own backdrop, and its back arrow is a real
+   * navigation home. Any failure falls through to a normal load. */
 
   let busy = false;
 
@@ -103,22 +112,39 @@
       const cur = document.querySelector('main');
       if (!next || !cur) { location.href = path; return; }
 
-      cur.replaceWith(next);
+      cur.innerHTML = next.innerHTML;
+      cur.hidden = false;
       document.title = doc.title;
       if (push) history.pushState({ ency: 1 }, '', path);
 
-      for (const a of document.querySelectorAll('.nav a')) {
-        const on = a.getAttribute('href') === path;
-        a.classList.toggle('on', on);
-        if (on) a.setAttribute('aria-current', 'page');
-        else a.removeAttribute('aria-current');
-      }
+      setNav(path === '/tools' ? 'tools' : 'music');
       window.scrollTo(0, 0);
     } catch {
       location.href = path;
     } finally {
       busy = false;
     }
+  }
+
+  const roomOpen = () => {
+    const m = document.querySelector('main');
+    return !!m && !m.hidden;
+  };
+
+  function enterRoom(path, push) {
+    // demote only on the way in; room-to-room leaves the mesh alone
+    if (window.encyGate && !roomOpen()) window.encyGate.demote();
+    return go(path, push);
+  }
+
+  function leaveRoom(push) {
+    const m = document.querySelector('main');
+    if (m) { m.hidden = true; m.innerHTML = ''; }
+    if (window.encyGate) window.encyGate.restore();
+    setNav(null);
+    document.title = 'ency';
+    if (push) history.pushState({ ency: 1 }, '', '/');
+    window.scrollTo(0, 0);
   }
 
   function initRouter() {
@@ -128,14 +154,28 @@
       const a = e.target.closest && e.target.closest('a[href]');
       if (!a || a.target) return;
       const href = a.getAttribute('href');
-      if (!INTERIOR.has(href)) return;          // the gate, and anything off-site
-      e.preventDefault();
-      if (href !== location.pathname) go(href, true);
+
+      if (INTERIOR.has(href)) {
+        // on the shell, before the gate script has finished booting, there is
+        // nothing to demote yet — let the browser do a real navigation
+        if (document.getElementById('room') && !window.encyGate) return;
+        e.preventDefault();
+        if (href !== location.pathname) enterRoom(href, true);
+        return;
+      }
+      // on the shell the back arrow closes the room; on a directly-loaded
+      // room there is no gate underneath, so let it navigate for real
+      if (href === '/' && window.encyGate && roomOpen()) {
+        e.preventDefault();
+        leaveRoom(true);
+      }
     });
 
     window.addEventListener('popstate', function () {
-      if (INTERIOR.has(location.pathname)) go(location.pathname, false);
-      else location.reload();                   // back into the gate: real load
+      const p = location.pathname;
+      if (INTERIOR.has(p)) enterRoom(p, false);
+      else if (window.encyGate) leaveRoom(false);
+      else location.reload();
     });
   }
 
