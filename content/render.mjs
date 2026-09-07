@@ -1,0 +1,44 @@
+/* Turning content into markup, server-side, so a page is complete however it
+ * is requested — by a browser, by the router's fetch, or by a crawler. The
+ * card markup lives here and nowhere else. */
+
+const esc = s => String(s).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* the smeared "content" behind the glass — never legible, just present */
+const VEIL =
+  '<div class="veil" aria-hidden="true">' +
+    '<span class="blob b1"></span><span class="blob b2"></span>' +
+    '<span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>' +
+  '</div>';
+
+const placeholderCard = () =>
+  `<article class="card">${VEIL}<div class="soon">coming soon</div></article>`;
+
+const releaseCard = item => {
+  const inner =
+    (item.art ? `<img class="art" src="${esc(item.art)}" alt="" loading="lazy">` : VEIL) +
+    `<div class="label">${esc(item.title)}</div>`;
+  return item.href
+    ? `<a class="card" href="${esc(item.href)}"${item.href.startsWith('http')
+        ? ' target="_blank" rel="noopener noreferrer"' : ''}>${inner}</a>`
+    : `<article class="card">${inner}</article>`;
+};
+
+export function renderGrid({ slots = 0, items = [], wide = false }) {
+  const cells = [];
+  for (let i = 0; i < slots; i++) {
+    cells.push(items[i] ? releaseCard(items[i]) : placeholderCard());
+  }
+  return `<div class="grid${wide ? ' two' : ''}">\n      ${cells.join('\n      ')}\n    </div>`;
+}
+
+export function renderSections(sections) {
+  return sections.map(section =>
+    '<section class="sect">\n' +
+    `    <h2>${esc(section.id)}</h2>\n` +
+    '    <div class="rule"></div>\n' +
+    `    ${renderGrid(section)}\n` +
+    '  </section>'
+  ).join('\n\n  ');
+}

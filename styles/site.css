@@ -1,0 +1,397 @@
+/* ency — one stylesheet for the whole site.
+ *
+ * The gate and the rooms want opposite things from the document: the gate is
+ * a fixed app surface that must not scroll, a room is a page that must. That
+ * is settled by a class on <html> — `gate` or `page` — rather than by two
+ * stylesheets racing to override each other. A room opened over the gate adds
+ * `room`, which lets the gate scroll for as long as it is hosting one.
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  --paper: #232323;
+  --ink:   #c0c0c0;
+  --dim:   #6f6f6f;
+  --faint: #3a3a3a;
+  --warn:  #d08a8a;
+  --mono:  ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ------------------------------------------------------------------ base */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { background: var(--paper); }
+body {
+  color: var(--ink);
+  font: 12px/1.6 var(--mono);
+  letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+}
+
+html.gate, html.gate body { height: 100%; overflow: hidden; }
+html.gate body { touch-action: pan-x pan-y; }
+
+html.page, html.page body { min-height: 100%; }
+html.page body { overflow-x: hidden; }
+
+/* a room, open over the gate: it scrolls like a page while it is up */
+html.gate.room, html.gate.room body { overflow: auto; height: auto; }
+html.gate.room #cv { pointer-events: none; }
+
+:focus-visible { outline: 1px solid rgba(255, 255, 255, 0.5); outline-offset: 2px; }
+
+/* ------------------------------------------------------------- the mesh */
+
+#cv { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+html.gate #cv { transition: filter 700ms ease, opacity 700ms ease; }
+
+/* a room loaded on its own brings its own demoted copy */
+#bg {
+  position: fixed; inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(7px) brightness(0.4);
+  opacity: 0.62;
+}
+
+/* --------------------------------------------------------------- chrome */
+
+.nav {
+  position: fixed;
+  top: 18px; left: 18px;
+  z-index: 3;
+  display: flex; flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.nav a {
+  font: 12px/1 var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--dim);
+  text-decoration: none;
+  padding: 3px 0;
+  transition: color 160ms ease;
+}
+.nav a:hover, .nav a:focus-visible { color: var(--ink); }
+.nav a.on { color: var(--ink); }
+.nav a.back {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--faint);
+  margin-bottom: 7px;
+  padding: 2px 0;
+}
+.nav a.back:hover, .nav a.back:focus-visible { color: var(--ink); }
+
+.links {
+  position: fixed;
+  right: 20px;
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+}
+.links a {
+  width: 30px; height: 30px;          /* bare marks, but still a real target */
+  display: grid; place-items: center;
+  color: var(--dim);
+  transition: color 160ms ease;
+}
+.links a:hover, .links a:focus-visible { color: var(--ink); }
+.links svg { width: 19px; height: 19px; }
+
+/* ----------------------------------------------------------- the gate */
+
+.foot {
+  position: fixed;
+  left: 50%;
+  bottom: max(38px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 13px;
+}
+.foot .line {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: var(--dim);
+}
+
+form.field {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: min(320px, 78vw);
+  padding: 3px 3px 3px 15px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  transition: border-color 140ms ease;
+}
+form.field:focus-within { border-color: rgba(255, 255, 255, 0.28); }
+form.field input {
+  flex: 1; min-width: 0;
+  background: none; border: 0; outline: 0;
+  color: var(--ink);
+  font: 12px/1 var(--mono);
+  letter-spacing: 0.06em;
+  padding: 9px 0;
+}
+form.field input::placeholder { color: var(--faint); }
+form.field button {
+  flex: none;
+  width: 29px; height: 29px;
+  display: grid; place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
+  font: 12px/1 var(--mono);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+form.field button:hover { background: rgba(255, 255, 255, 0.16); }
+form.field.done { border-color: rgba(255, 255, 255, 0.3); }
+
+/* the field breathes once as the number leaves it */
+form.field.flash { animation: fieldFlash 760ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes fieldFlash {
+  0%   { border-color: rgba(255,255,255,0.5); box-shadow: 0 0 0 0 rgba(255,255,255,0.16); }
+  100% { border-color: rgba(255,255,255,0.1); box-shadow: 0 0 0 20px rgba(255,255,255,0); }
+}
+
+.foot .enter {
+  appearance: none; cursor: pointer;
+  font: 12px/1 var(--mono);
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 12px 26px;
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.foot .enter:hover { border-color: rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.09); }
+
+.said {
+  height: 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.said.on { opacity: 1; }
+.said.bad { color: var(--warn); }
+
+/* ------------------------------------------------------------- the lock */
+
+.lock {
+  position: fixed;
+  top: 18px; right: 18px;
+  z-index: 3;
+  width: 29px; height: 29px;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--faint);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.lock:hover, .lock:focus-visible { color: var(--ink); border-color: rgba(255,255,255,0.22); }
+.lock svg { width: 12px; height: 12px; }
+
+/* --- the studio modal: the expansive version of the same glass --- */
+
+.scrim {
+  position: fixed; inset: 0;
+  z-index: 10;
+  display: grid; place-items: center;
+  background: rgba(15, 15, 15, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.scrim.on { opacity: 1; pointer-events: auto; }
+
+.modal {
+  width: min(400px, 84vw);
+  padding: 30px 30px 26px;
+  display: flex; flex-direction: column; gap: 17px;
+  border-radius: 22px;
+  background: rgba(38, 38, 38, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(34px) saturate(1.5);
+  -webkit-backdrop-filter: blur(34px) saturate(1.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 26px 64px rgba(0, 0, 0, 0.5);
+  transform: scale(0.97);
+  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.scrim.on .modal { transform: scale(1); }
+
+.modal .lab { font-size: 10px; letter-spacing: 0.24em; color: var(--dim); }
+.modal .row { display: flex; gap: 8px; }
+.modal input {
+  flex: 1; min-width: 0;
+  padding: 11px 14px;
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: var(--ink);
+  font: 12px/1 var(--mono);
+  letter-spacing: 0.26em;
+  outline: 0;
+}
+.modal input:focus { border-color: rgba(255, 255, 255, 0.3); }
+.modal input::placeholder { color: var(--faint); letter-spacing: 0.1em; }
+.modal .go {
+  flex: none;
+  padding: 0 17px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  font: 11px/1 var(--mono);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+.modal .go:hover { background: rgba(255, 255, 255, 0.16); }
+.modal .err { font-size: 10px; letter-spacing: 0.1em; color: var(--warn); min-height: 13px; }
+
+/* ---------------------------------------------------------- the rooms */
+
+main {
+  position: relative;
+  z-index: 1;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 108px 26px 140px;
+}
+
+.title {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: var(--dim);
+  margin-bottom: 26px;
+}
+
+.sect { margin-bottom: 52px; }
+.sect h2 {
+  font: 12px/1 var(--mono);
+  font-weight: 400;
+  letter-spacing: 0.24em;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+.sect .rule {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.09);
+  margin: 14px 0 20px;
+}
+
+.grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  perspective: 900px;
+}
+.grid.two { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+.card {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid; place-items: center;
+  text-decoration: none;
+  will-change: transform;
+  /* the follow is damped, so the lean trails the cursor rather than snapping */
+  transition: transform 190ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 190ms ease;
+}
+.card:hover { border-color: rgba(255, 255, 255, 0.2); }
+.grid.two .card { aspect-ratio: 16 / 10; }
+
+/* the smeared "content" underneath — never legible, just present */
+.veil {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  filter: blur(19px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.veil .blob {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.veil .b1 { width: 54%; height: 54%; left: -8%;  top: -14%; }
+.veil .b2 { width: 40%; height: 40%; right: -6%; bottom: -10%; background: rgba(255,255,255,0.09); }
+.veil .ln {
+  position: absolute; left: 14%; height: 7px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.veil .l1 { top: 58%; width: 56%; }
+.veil .l2 { top: 68%; width: 40%; }
+.veil .l3 { top: 78%; width: 48%; opacity: 0.6; }
+
+.card .soon {
+  position: relative;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: var(--dim);
+}
+
+/* a filled slot: art under a label sitting on the bottom edge */
+.card .art {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.card .label {
+  position: absolute;
+  left: 14px; right: 14px; bottom: 12px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--ink);
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* ----------------------------------------------------------- responsive */
+
+@media (max-width: 560px) {
+  main { padding: 164px 18px 128px; }
+  .links { right: 16px; gap: 9px; }
+  /* on the gate the centred field owns the bottom edge, so the row lifts */
+  html.gate:not(.room) .links {
+    bottom: calc(max(38px, env(safe-area-inset-bottom, 0px)) + 96px);
+  }
+}
+
+/* iOS zooms into any focused input under 16px — give touch screens a 16px
+   input instead of capping the viewport's zoom */
+@media (pointer: coarse) {
+  form.field input { font-size: 16px; }
+  .modal input { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; }
+}

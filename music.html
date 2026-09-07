@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="page">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -10,74 +10,19 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="stylesheet" href="/page.css">
+<link rel="stylesheet" href="/styles/site.css">
 </head>
-<body>
+<body data-room="music">
 
 <div id="bg"><canvas id="cv"></canvas></div>
 
 <main>
   <div class="title">music</div>
 
-  <section class="sect">
-    <h2>ARMORY01</h2>
-    <div class="rule"></div>
-
-    <!-- six slots; each becomes a record when there is one to put in it.
-         Static markup on purpose — <main> is swapped in by the router, and
-         injected scripts would not run. -->
-    <div class="grid">
-      <article class="card">
-        <div class="veil" aria-hidden="true">
-          <span class="blob b1"></span><span class="blob b2"></span>
-          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
-        </div>
-        <div class="soon">coming soon</div>
-      </article>
-      <article class="card">
-        <div class="veil" aria-hidden="true">
-          <span class="blob b1"></span><span class="blob b2"></span>
-          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
-        </div>
-        <div class="soon">coming soon</div>
-      </article>
-      <article class="card">
-        <div class="veil" aria-hidden="true">
-          <span class="blob b1"></span><span class="blob b2"></span>
-          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
-        </div>
-        <div class="soon">coming soon</div>
-      </article>
-      <article class="card">
-        <div class="veil" aria-hidden="true">
-          <span class="blob b1"></span><span class="blob b2"></span>
-          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
-        </div>
-        <div class="soon">coming soon</div>
-      </article>
-      <article class="card">
-        <div class="veil" aria-hidden="true">
-          <span class="blob b1"></span><span class="blob b2"></span>
-          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
-        </div>
-        <div class="soon">coming soon</div>
-      </article>
-      <article class="card">
-        <div class="veil" aria-hidden="true">
-          <span class="blob b1"></span><span class="blob b2"></span>
-          <span class="ln l1"></span><span class="ln l2"></span><span class="ln l3"></span>
-        </div>
-        <div class="soon">coming soon</div>
-      </article>
-    </div>
-  </section>
+  <!--{{music}}-->
 </main>
 
-<script src="/ribbon.js"></script>
-<script src="/page.js"></script>
-<script>
-  encyChrome({ current: 'music' });
-  encyBackdrop(document.getElementById('cv'), document.getElementById('bg'));
-</script>
+<script src="/js/vendor/ribbon.js"></script>
+<script type="module" src="/js/pages/room.js"></script>
 </body>
 </html>

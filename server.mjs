@@ -21,6 +21,9 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const PORT = process.env.PORT || 4720;
+import { MUSIC_SECTIONS, TOOLS } from './content/site.mjs';
+import { renderGrid, renderSections } from './content/render.mjs';
+
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const EMAILS = path.join(DATA_DIR, 'emails.jsonl');
@@ -186,6 +189,25 @@ async function serveFile(res, name) {
   }
 }
 
+// A page with content interpolated into it. The markup ships complete however
+// it is asked for — by a browser, by the router's fetch, or by a crawler — so
+// there is no second code path that renders cards on the client.
+async function servePage(res, name, subs) {
+  try {
+    let html = await readFile(path.join(ROOT, name), 'utf8');
+    for (const [key, value] of Object.entries(subs)) {
+      html = html.replace(`<!--{{${key}}}-->`, value);
+    }
+    res.writeHead(200, {
+      'Content-Type': MIME['.html'],
+      'Cache-Control': 'no-cache',
+    });
+    res.end(html);
+  } catch {
+    json(res, 404, { error: 'not found' });
+  }
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // E.164-ish: strip formatting, 7–15 digits; a bare US 10-digit gets +1
@@ -227,8 +249,11 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/lab') return serveFile(res, 'lab.html');   // mesh v2 prototype, unlisted
 
-    if (p === '/tools' || p === '/tools.html') return serveFile(res, 'tools.html');
-    if (p === '/music' || p === '/music.html') return serveFile(res, 'music.html');
+    if (p === '/tools' || p === '/tools.html')
+      return servePage(res, 'tools.html', { tools: renderGrid(TOOLS) });
+
+    if (p === '/music' || p === '/music.html')
+      return servePage(res, 'music.html', { music: renderSections(MUSIC_SECTIONS) });
 
     if (p === '/studio' || p === '/studio.html') {
       if (!authed(req)) { res.writeHead(302, { Location: '/' }); return res.end(); }
@@ -352,8 +377,12 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
-    // ---- static (ribbon.js and friends), never the data dir
-    if (/^\/[\w.-]+\.(js|css|svg|png|ico|json)$/.test(p)) return serveFile(res, p.slice(1));
+    // ---- static: the root (favicons, mark) plus js/ and styles/, one level
+    // deep. Directory segments cannot contain a dot, so there is no climbing
+    // out; content/ is server-only and the data dir is not on the list.
+    if (/^\/(?:(?:js|styles)\/(?:[\w-]+\/)?)?[\w.-]+\.(js|css|svg|png|ico|json)$/.test(p)) {
+      return serveFile(res, p.slice(1));
+    }
 
     return json(res, 404, { error: 'not found' });
   } catch (err) {

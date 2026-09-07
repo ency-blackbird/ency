@@ -11,14 +11,44 @@ No build step, no dependencies. `npm start` and open the port.
 
 ## Layout
 
-| file | what |
-|---|---|
-| `server.mjs` | the whole backend — static, preset, gate/join, lobby stream, auth |
-| `ribbon.js` | the mesh renderer, shared by both pages |
-| `lobby.js` | the wormhole beam-in + the minimap lobby panel |
-| `index.html` | public: fullscreen mesh, the gate → number flow, lock |
-| `studio.html` | gated: the same mesh plus every dial, publish, and both lists |
-| `mark.svg` | the mark (also embedded in `ribbon.js` as `LOGO_D`) |
+No build step, no dependencies. `npm start` and open the port.
+
+```
+index.html        the gate — markup only; also the shell rooms open inside
+tools.html        \ rooms: markup plus a {{…}} slot the server fills
+music.html        /
+studio.html       gated: the mesh plus every dial
+lab.html          mesh v2 prototype, unlisted
+server.mjs        the whole backend — static, pages, gate/join, lobby, auth
+styles/site.css   one stylesheet; <html class="gate|page"> settles the rest
+js/
+  pages/gate.js   entry: the gate, which hosts the rooms
+  pages/room.js   entry: a room loaded directly, with its own backdrop
+  gate.js         the gate — join flow, lobby, lock; returns the shell
+  router.js       soft routing; never touches anything outside <main>
+  chrome.js       the corner nav and the links row
+  tilt.js         cards lean toward the cursor
+  backdrop.js     the mesh as scenery for a standalone room
+  vendor/         ribbon.js, lobby.js — ported from the artifact, left alone
+content/
+  site.mjs        sections and releases, as data
+  render.mjs      content -> markup, server-side only
+```
+
+Application code is ES modules; `vendor/` stays classic scripts assigning
+globals, because it is a copy of the artifact and not ours to restructure.
+Nothing under `content/` is ever served — it is imported by `server.mjs` and
+interpolated into a page at request time, so the markup ships complete however
+it is asked for.
+
+### Why the router is hand-written
+
+Every framework router swaps DOM to navigate. The mesh must not be torn down,
+and a persisted canvas is exactly what those swaps handle worst — Astro's
+`transition:persist` detaches the whole body and lost canvas contexts in
+Safari 18 over it. This router fills `<main>` and touches nothing else, so the
+canvas is the same node from the gate through every room. That is the one
+thing to preserve if this ever moves onto a framework.
 
 ## The lobby
 
