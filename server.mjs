@@ -23,6 +23,8 @@ import { fileURLToPath } from 'node:url';
 const PORT = process.env.PORT || 4720;
 import { MUSIC_SECTIONS, TOOLS } from './content/site.mjs';
 import { renderGrid, renderSections } from './content/render.mjs';
+import { PORTFOLIO } from './content/portfolio.mjs';
+import { renderPortfolio } from './content/portfolio-render.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
@@ -152,6 +154,11 @@ const MIME = {
   '.png': 'image/png',
   '.json': 'application/json',
   '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
 };
 
 function json(res, code, body) {
@@ -192,7 +199,7 @@ async function serveFile(res, name) {
 // A page with content interpolated into it. The markup ships complete however
 // it is asked for — by a browser, by the router's fetch, or by a crawler — so
 // there is no second code path that renders cards on the client.
-async function servePage(res, name, subs) {
+async function servePage(res, name, subs, headers = {}) {
   try {
     let html = await readFile(path.join(ROOT, name), 'utf8');
     for (const [key, value] of Object.entries(subs)) {
@@ -201,6 +208,7 @@ async function servePage(res, name, subs) {
     res.writeHead(200, {
       'Content-Type': MIME['.html'],
       'Cache-Control': 'no-cache',
+      ...headers,
     });
     res.end(html);
   } catch {
@@ -254,6 +262,14 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/music' || p === '/music.html')
       return servePage(res, 'music.html', { music: renderSections(MUSIC_SECTIONS) });
+
+    // Unlisted: reachable only by its own path, never linked from the site.
+    // The header is what actually keeps it out of search — deliberately NOT
+    // robots.txt, since a Disallow line would publish the path it protects.
+    if (p === PORTFOLIO.path)
+      return servePage(res, 'portfolio.html',
+        { portfolio: renderPortfolio(PORTFOLIO) },
+        { 'X-Robots-Tag': 'noindex, nofollow, noarchive, noimageindex' });
 
     if (p === '/studio' || p === '/studio.html') {
       if (!authed(req)) { res.writeHead(302, { Location: '/' }); return res.end(); }
@@ -380,7 +396,7 @@ const server = http.createServer(async (req, res) => {
     // ---- static: the root (favicons, mark) plus js/ and styles/, one level
     // deep. Directory segments cannot contain a dot, so there is no climbing
     // out; content/ is server-only and the data dir is not on the list.
-    if (/^\/(?:(?:js|styles)\/(?:[\w-]+\/)?)?[\w.-]+\.(js|css|svg|png|ico|json)$/.test(p)) {
+    if (/^\/(?:(?:js|styles|media)\/(?:[\w-]+\/)?)?[\w.-]+\.(js|css|svg|png|ico|json|mp3|mp4|jpg|jpeg|webp)$/.test(p)) {
       return serveFile(res, p.slice(1));
     }
 
