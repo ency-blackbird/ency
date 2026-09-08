@@ -19,10 +19,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 
 const PORT = process.env.PORT || 4720;
-import { MUSIC_SECTIONS, TOOLS, SERVICES, CUTS } from './content/site.mjs';
-import { renderGrid, renderSections, renderServices, renderCuts } from './content/render.mjs';
+import { MUSIC_SECTIONS, TOOLS, SERVICES } from './content/site.mjs';
+import { renderGrid, renderSections, renderServices } from './content/render.mjs';
 import { PORTFOLIO } from './content/portfolio.mjs';
 import { renderPortfolio } from './content/portfolio-render.mjs';
 
@@ -181,19 +183,62 @@ function readBody(req, limit = 64 * 1024) {
   });
 }
 
-async function serveFile(res, name) {
+// Streams, and honours Range. Safari will not play media from a server that
+// answers 200-with-the-whole-file: it asks for a byte range and expects a 206
+// with Accept-Ranges, and refuses the element outright when it does not get
+// one. Chrome is forgiving here, which is exactly why this hid for so long.
+// Streaming also stops a 100MB read landing in memory per request.
+async function serveFile(res, name, req) {
   const abs = path.join(ROOT, path.normalize(name).replace(/^(\.\.[/\\])+/, ''));
   if (!abs.startsWith(ROOT)) return json(res, 403, { error: 'forbidden' });
+
+  let st;
   try {
-    const data = await readFile(abs);
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream',
+    st = await stat(abs);
+    if (!st.isFile()) throw new Error('not a file');
+  } catch {
+    return json(res, 404, { error: 'not found' });
+  }
+
+  const type = MIME[path.extname(abs)] || 'application/octet-stream';
+  const range = req && req.headers && req.headers.range;
+  const m = range && /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+
+  if (m && (m[1] || m[2])) {
+    let start, end;
+    if (m[1]) {
+      start = Number(m[1]);
+      end = m[2] ? Number(m[2]) : st.size - 1;
+    } else {
+      // bytes=-N is the LAST n bytes, not "up to n" — this is the form a player
+      // uses to find the moov atom at the end of an mp4, so getting it wrong
+      // means the file never becomes playable
+      start = Math.max(0, st.size - Number(m[2]));
+      end = st.size - 1;
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= st.size) {
+      res.writeHead(416, { 'Content-Range': `bytes */${st.size}` });
+      return res.end();
+    }
+    if (end >= st.size) end = st.size - 1;
+
+    res.writeHead(206, {
+      'Content-Type': type,
+      'Content-Length': end - start + 1,
+      'Content-Range': `bytes ${start}-${end}/${st.size}`,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
     });
-    res.end(data);
-  } catch {
-    json(res, 404, { error: 'not found' });
+    return createReadStream(abs, { start, end }).pipe(res);
   }
+
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Content-Length': st.size,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'no-cache',
+  });
+  createReadStream(abs).pipe(res);
 }
 
 // A page with content interpolated into it. The markup ships complete however
@@ -253,9 +298,9 @@ const server = http.createServer(async (req, res) => {
 
   try {
     // ---- pages
-    if (p === '/' || p === '/index.html') return serveFile(res, 'index.html');
+    if (p === '/' || p === '/index.html') return serveFile(res, 'index.html', req);
 
-    if (p === '/lab') return serveFile(res, 'lab.html');   // mesh v2 prototype, unlisted
+    if (p === '/lab') return serveFile(res, 'lab.html', req);   // mesh v2 prototype, unlisted
 
     if (p === '/tools' || p === '/tools.html')
       return servePage(res, 'tools.html', { tools: renderGrid(TOOLS) });
@@ -265,9 +310,6 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/services' || p === '/services.html')
       return servePage(res, 'services.html', { services: renderServices(SERVICES) });
-
-    if (p === '/cuts' || p === '/cuts.html')
-      return servePage(res, 'cuts.html', { cuts: renderCuts(CUTS) });
 
     // Unlisted: reachable only by its own path, never linked from the site.
     // The header is what actually keeps it out of search — deliberately NOT
@@ -279,7 +321,7 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/studio' || p === '/studio.html') {
       if (!authed(req)) { res.writeHead(302, { Location: '/' }); return res.end(); }
-      return serveFile(res, 'studio.html');
+      return serveFile(res, 'studio.html', req);
     }
 
     // ---- public API
@@ -403,7 +445,7 @@ const server = http.createServer(async (req, res) => {
     // deep. Directory segments cannot contain a dot, so there is no climbing
     // out; content/ is server-only and the data dir is not on the list.
     if (/^\/(?:(?:js|styles|media)\/(?:[\w-]+\/)?)?[\w.-]+\.(js|css|svg|png|ico|json|mp3|mp4|jpg|jpeg|webp)$/.test(p)) {
-      return serveFile(res, p.slice(1));
+      return serveFile(res, p.slice(1), req);
     }
 
     return json(res, 404, { error: 'not found' });
