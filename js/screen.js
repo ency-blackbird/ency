@@ -26,11 +26,18 @@ export function initScreen(root = document) {
     a11y: { enabled: true },
   });
 
-  const stopAll = () => slides.forEach(s => {
-    const v = s.querySelector('video');
-    v.pause();
-    s.classList.remove('on');
-  });
+  const stopAll = () => stopOthers(null);
+
+  // stop everything except one slide. Flipping away still stops the cut you
+  // left (it is no longer the one kept), while a cut we are deliberately
+  // starting survives the slideChange that brought it to the front.
+  function stopOthers(keep) {
+    for (const s of slides) {
+      if (s === keep) continue;
+      s.querySelector('video').pause();
+      s.classList.remove('on');
+    }
+  }
 
   const me = { pause: stopAll };
   register(me);
@@ -40,13 +47,16 @@ export function initScreen(root = document) {
     const btn = slide.querySelector('.vplay');
 
     btn.addEventListener('click', () => {
+      // pressing play plays. If the cut is not at the front, bring it forward
+      // and start it in the same gesture — making people click twice is how
+      // this read as broken.
       const i = slides.indexOf(slide);
-      if (swiper.activeIndex !== i) { swiper.slideTo(i); return; }
+      if (swiper.activeIndex !== i) swiper.slideTo(i);
 
       if (!video.paused) { video.pause(); return; }
 
       solo(me);                     // silence the crate before we make noise
-      stopAll();
+      stopOthers(slide);
       video.muted = false;
       video.controls = true;
       slide.classList.add('on');
@@ -59,7 +69,7 @@ export function initScreen(root = document) {
   }
 
   // flipping away from a playing cut stops it, same rule as the crate
-  swiper.on('slideChange', stopAll);
+  swiper.on('slideChange', () => stopOthers(slides[swiper.activeIndex]));
 
   return { swiper };
 }
