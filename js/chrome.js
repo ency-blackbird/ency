@@ -6,6 +6,7 @@
 export const PAGES = [
   ['tools', '/tools'],
   ['music', '/music'],
+  ['services', '/services'],
 ];
 
 export const INTERIOR = new Set(PAGES.map(([, href]) => href));

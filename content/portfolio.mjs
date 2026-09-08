@@ -89,18 +89,6 @@ export const PORTFOLIO = {
     },
   ],
 
-  /* Offered work, sitting beside the scheduled work. Deliberately thin — no
-   * rates, turnaround or credits invented here; add them when they are real. */
-  services: {
-    title: 'Services',
-    lede: 'Mixing and mastering, available for booking.',
-    items: [
-      { name: 'Mixing' },
-      { name: 'Mastering' },
-    ],
-    cta: { label: 'Enquire', href: 'mailto:noah@ency.world?subject=Mixing%20%2F%20mastering' },
-  },
-
   /* What is already scheduled — evidence rather than intention. */
   underway: [
     {

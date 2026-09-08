@@ -19,3 +19,17 @@ export const TOOLS = {
   wide: true,
   items: [],
 };
+
+/* Services — offered work, on its own room off the gate. Deliberately thin:
+ * no rates, turnaround or credits until they are real. */
+export const SERVICES = {
+  lede: 'Mixing and mastering, available for booking.',
+  body:
+    'I master my own records for release and for DJ sets, and I take on work ' +
+    'for other artists.',
+  items: [
+    { name: 'Mixing',    note: 'balance, space, and the low end' },
+    { name: 'Mastering', note: 'loud enough for a club, intact on headphones' },
+  ],
+  cta: { label: 'Enquire', href: 'mailto:noah@ency.world?subject=Mixing%20%2F%20mastering' },
+};

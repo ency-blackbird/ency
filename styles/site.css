@@ -742,33 +742,29 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
   html.pf main { padding-top: 56px; }
 }
 
-/* --- closing pair: what is booked, and what can be booked -------------- */
+/* --- services ---------------------------------------------------------- */
 
-.closing {
-  display: grid;
-  grid-template-columns: 1fr 290px;
-  gap: 40px;
-  align-items: start;
-}
-.closing .sect { margin-bottom: 0; }
-
-.services {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 20px;
-}
-.svc-lede { color: var(--dim); line-height: 1.8; margin-bottom: 16px; }
-
-.svc-list { list-style: none; margin-bottom: 18px; }
-.svc-list li {
+.services { max-width: 560px; }
+.svc-lede {
   color: var(--ink);
-  letter-spacing: 0.14em;
-  font-size: 11px;
-  padding: 9px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  line-height: 1.7;
+  margin-bottom: 14px;
 }
-.svc-list li:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.svc-body { color: var(--dim); line-height: 1.85; margin-bottom: 26px; }
+
+.svc-list { list-style: none; margin-bottom: 28px; }
+.svc-list li {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 18px;
+  padding: 13px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.svc-list li:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.svc-list .k { color: var(--ink); letter-spacing: 0.16em; font-size: 11px; }
+.svc-list .v { color: var(--dim); }
 
 .svc-cta {
   display: inline-block;
@@ -778,12 +774,11 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
   text-decoration: none;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
-  padding: 10px 20px;
+  padding: 12px 24px;
   transition: border-color 160ms ease, background 160ms ease;
 }
 .svc-cta:hover { border-color: rgba(255, 255, 255, 0.34); background: rgba(255, 255, 255, 0.06); }
 
-@media (max-width: 860px) {
-  .closing { grid-template-columns: 1fr; gap: 0; }
-  .closing .sect { margin-bottom: 52px; }
+@media (max-width: 560px) {
+  .svc-list li { grid-template-columns: 1fr; gap: 4px; }
 }
