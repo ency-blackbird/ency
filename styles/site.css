@@ -741,3 +741,49 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
   .ledger li { grid-template-columns: 1fr; gap: 6px; }
   html.pf main { padding-top: 56px; }
 }
+
+/* --- closing pair: what is booked, and what can be booked -------------- */
+
+.closing {
+  display: grid;
+  grid-template-columns: 1fr 290px;
+  gap: 40px;
+  align-items: start;
+}
+.closing .sect { margin-bottom: 0; }
+
+.services {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 20px;
+}
+.svc-lede { color: var(--dim); line-height: 1.8; margin-bottom: 16px; }
+
+.svc-list { list-style: none; margin-bottom: 18px; }
+.svc-list li {
+  color: var(--ink);
+  letter-spacing: 0.14em;
+  font-size: 11px;
+  padding: 9px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.svc-list li:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+
+.svc-cta {
+  display: inline-block;
+  font: 11px/1 var(--mono);
+  letter-spacing: 0.16em;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 10px 20px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.svc-cta:hover { border-color: rgba(255, 255, 255, 0.34); background: rgba(255, 255, 255, 0.06); }
+
+@media (max-width: 860px) {
+  .closing { grid-template-columns: 1fr; gap: 0; }
+  .closing .sect { margin-bottom: 52px; }
+}

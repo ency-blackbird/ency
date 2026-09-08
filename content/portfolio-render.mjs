@@ -103,6 +103,15 @@ function renderTools(tools) {
     </div>`);
 }
 
+function renderServices(s) {
+  const items = s.items.map(i => `<li>${esc(i.name)}</li>`).join('');
+  return section('services', s.title, null, `<div class="services">
+      <p class="svc-lede">${esc(s.lede)}</p>
+      <ul class="svc-list">${items}</ul>
+      <a class="svc-cta" href="${esc(s.cta.href)}">${esc(s.cta.label)}</a>
+    </div>`);
+}
+
 function renderUnderway(items) {
   const rows = items.map(i => `
       <li><span class="k">${esc(i.title)}</span><span class="v">${esc(i.body)}</span></li>`).join('');
@@ -122,7 +131,8 @@ export function renderPortfolio(p) {
     renderCrate(p.armory),
     renderVisuals(p.visuals),
     renderTools(p.tools),
-    renderUnderway(p.underway),
+    // what is booked, and what can be booked — side by side on a wide screen
+    `<div class="closing">\n  ${renderUnderway(p.underway)}\n\n  ${renderServices(p.services)}\n</div>`,
     `<footer class="pf-foot">
     <a href="${esc(p.contact.href)}">${esc(p.contact.label)}</a>
   </footer>`,
