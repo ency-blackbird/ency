@@ -58,3 +58,26 @@ export function renderServices(s) {
     </div>
   </section>`;
 }
+
+export function renderCuts(c) {
+  const steps = c.steps.map(i => `
+        <li><span class="k">${esc(i.k)}</span><span class="v">${esc(i.v)}</span></li>`).join('');
+  const cta = c.available
+    ? `<a class="svc-cta" href="${esc(c.download)}">Download for Mac · ${esc(c.version)}</a>`
+    : `<span class="svc-cta cuts-off" aria-disabled="true">signed build coming this week</span>`;
+  return `<section class="sect">
+    <div class="cuts">
+      <div class="cuts-hero">
+        <img src="/media/cuts/icon.png" alt="" width="96" height="96">
+        <p class="svc-lede">${esc(c.lede)}</p>
+      </div>
+      <p class="svc-body">${esc(c.body)}</p>
+      <ul class="svc-list">${steps}
+      </ul>
+      <p class="cuts-req">${esc(c.requires)}</p>
+      ${cta}
+      <p class="cuts-links"><a href="${esc(c.source)}" target="_blank" rel="noopener noreferrer">source on GitHub</a></p>
+      <p class="cuts-note">${esc(c.network)}</p>
+    </div>
+  </section>`;
+}

@@ -21,8 +21,8 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const PORT = process.env.PORT || 4720;
-import { MUSIC_SECTIONS, TOOLS, SERVICES } from './content/site.mjs';
-import { renderGrid, renderSections, renderServices } from './content/render.mjs';
+import { MUSIC_SECTIONS, TOOLS, SERVICES, CUTS } from './content/site.mjs';
+import { renderGrid, renderSections, renderServices, renderCuts } from './content/render.mjs';
 import { PORTFOLIO } from './content/portfolio.mjs';
 import { renderPortfolio } from './content/portfolio-render.mjs';
 
@@ -265,6 +265,9 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/services' || p === '/services.html')
       return servePage(res, 'services.html', { services: renderServices(SERVICES) });
+
+    if (p === '/cuts' || p === '/cuts.html')
+      return servePage(res, 'cuts.html', { cuts: renderCuts(CUTS) });
 
     // Unlisted: reachable only by its own path, never linked from the site.
     // The header is what actually keeps it out of search — deliberately NOT
