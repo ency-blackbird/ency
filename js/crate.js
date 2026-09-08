@@ -7,6 +7,8 @@
  * only one Audio object, so two tracks can never sound at once.
  */
 
+import { register, solo } from './solo.js';
+
 export function initCrate(root = document) {
   const crate = root.querySelector('.crate');
   if (!crate || typeof Swiper === 'undefined') return null;
@@ -26,22 +28,17 @@ export function initCrate(root = document) {
   audio.preload = 'none';
   let active = 0;
 
+  // No 3D rotation. Coverflow's rotateY foreshortens a square sleeve into a
+  // trapezoid, which stops it reading as a record and dates the whole thing.
+  // Depth here is scale and opacity only — the covers stay square.
   const swiper = new Swiper(crate.querySelector('.records'), {
-    effect: 'coverflow',
     grabCursor: true,
     centeredSlides: true,
     slidesPerView: 'auto',
+    spaceBetween: 22,
     initialSlide: 0,
-    speed: 520,
+    speed: 560,
     keyboard: { enabled: true },
-    mousewheel: { forceToAxis: true, sensitivity: 0.6 },
-    coverflowEffect: {
-      rotate: 34,
-      stretch: 0,
-      depth: 220,
-      modifier: 1,
-      slideShadows: false,   // the shadows read as grey boxes on this palette
-    },
     navigation: {
       prevEl: crate.querySelector('.crate-nav .prev'),
       nextEl: crate.querySelector('.crate-nav .next'),
@@ -102,9 +99,15 @@ export function initCrate(root = document) {
     if (!audio.duration) return;
     fill.style.width = (audio.currentTime / audio.duration * 100).toFixed(2) + '%';
   });
-  audio.addEventListener('play', () => crate.classList.add('playing'));
+  audio.addEventListener('play', () => {
+    solo(me);                           // a video with sound must yield to this
+    crate.classList.add('playing');
+  });
   audio.addEventListener('pause', () => crate.classList.remove('playing'));
   audio.addEventListener('ended', stop);
+
+  const me = { pause: stop };
+  register(me);
 
   paint();
   return { swiper, audio };

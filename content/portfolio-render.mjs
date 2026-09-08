@@ -50,14 +50,20 @@ function renderCrate({ id, note, tracks }) {
     </div>`);
 }
 
-/* The world: the narrative cuts, plus the aesthetic in Noah's own words. */
+/* The world: the narrative cuts, in the same crate you flip through. They sit
+   on their posters until asked — these are pieces to watch, not wallpaper. */
 function renderVisuals(v) {
-  const reels = v.reels.map(r => `
-      <figure class="vis">
-        <video src="${esc(r.src)}" poster="${esc(r.poster)}"
-               muted loop playsinline preload="none"></video>
-        <figcaption><span class="vt">${esc(r.title)}</span><span class="vn">${esc(r.note)}</span></figcaption>
-      </figure>`).join('');
+  const slides = v.reels.map(r => `
+          <figure class="swiper-slide vis">
+            <div class="frame">
+              <video src="${esc(r.src)}" poster="${esc(r.poster)}"
+                     loop playsinline preload="none"></video>
+              <button class="vplay" type="button" aria-label="Play ${esc(r.title)}">
+                <span class="vglyph" aria-hidden="true"></span>
+              </button>
+            </div>
+            <figcaption><span class="vt">${esc(r.title)}</span><span class="vn">${esc(r.note)}</span></figcaption>
+          </figure>`).join('');
 
   return section('visuals', 'The world', null, `<div class="world">
       <p class="world-lede">${esc(v.lede)}</p>
@@ -65,22 +71,18 @@ function renderVisuals(v) {
       <p class="world-arc">${esc(v.arc)}</p>
     </div>
 
-    <div class="vis-grid">${reels}
+    <div class="screen">
+      <div class="swiper reels">
+        <div class="swiper-wrapper">${slides}
+        </div>
+      </div>
+      <div class="screen-nav">
+        <button class="prev" type="button" aria-label="Previous cut">&#8592;</button>
+        <button class="next" type="button" aria-label="Next cut">&#8594;</button>
+      </div>
     </div>
 
     <p class="prov-note">${esc(v.provenance)}</p>`);
-}
-
-/* Reels play muted on sight and loop — texture, not something to sit through. */
-function renderReels({ note, items }) {
-  const cells = items.map(r => `
-      <figure class="reel">
-        <video src="${esc(r.src)}" poster="${esc(r.poster)}"
-               muted loop playsinline preload="none"></video>
-        <figcaption>${esc(r.title)}</figcaption>
-      </figure>`).join('');
-  return section('reels', 'Transmissions', note, `<div class="reel-grid">${cells}
-    </div>`);
 }
 
 function renderTools(tools) {
@@ -119,7 +121,6 @@ export function renderPortfolio(p) {
     intro,
     renderCrate(p.armory),
     renderVisuals(p.visuals),
-    renderReels(p.reels),
     renderTools(p.tools),
     renderUnderway(p.underway),
     `<footer class="pf-foot">

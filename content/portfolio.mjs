@@ -69,18 +69,6 @@ export const PORTFOLIO = {
     ],
   },
 
-  /* The short cuts — vertical, social-shaped, muted and looping. Texture
-   * alongside the longer narrative pieces above. */
-  reels: {
-    note: 'Short cuts from the release.',
-    items: [
-      { title: 'Intro',       src: '/media/reels/intro.mp4',             poster: '/media/reels/intro.jpg' },
-      { title: 'Rebound',     src: '/media/reels/rebound.mp4',           poster: '/media/reels/rebound.jpg' },
-      { title: 'Rebound — opening', src: '/media/reels/rebound-intro.mp4', poster: '/media/reels/rebound-intro.jpg' },
-      { title: 'Transmission 0906', src: '/media/reels/transmission-0906.mp4', poster: '/media/reels/transmission-0906.jpg' },
-    ],
-  },
-
   /* Software. Both genuinely in progress — the flag is what keeps this honest. */
   tools: [
     {

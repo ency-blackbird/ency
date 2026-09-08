@@ -433,12 +433,18 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
 
 .crate { position: relative; margin-top: 6px; }
 
-.records { padding: 10px 0 26px; overflow: visible; }
+.records { padding: 16px 0 30px; overflow: visible; }
 .records .swiper-slide {
   width: 300px;                 /* slidesPerView:auto reads this */
-  transition: opacity 420ms ease;
+  /* depth is scale and opacity — a rotated sleeve stops reading as a square */
+  transform: scale(0.82);
+  opacity: 0.34;
+  transition: transform 560ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 560ms ease;
 }
-.records .swiper-slide:not(.swiper-slide-active) { opacity: 0.5; }
+.records .swiper-slide-active { transform: scale(1); opacity: 1; }
+.records .swiper-slide-prev,
+.records .swiper-slide-next { transform: scale(0.88); opacity: 0.6; }
 .records .swiper-slide:not(.swiper-slide-active) .sleeve { cursor: pointer; }
 
 .sleeve {
@@ -454,8 +460,12 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
   object-fit: cover;
   display: block;
   border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.4);
+  transition: box-shadow 560ms ease;
+}
+.swiper-slide-active .sleeve img {
+  box-shadow: 0 26px 60px rgba(0, 0, 0, 0.62);
 }
 
 /* the record itself, riding just behind the sleeve; it slides out when the
@@ -581,28 +591,78 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
   letter-spacing: 0.12em;
 }
 
-.vis-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+.screen { position: relative; }
+.reels { padding: 4px 0 8px; overflow: visible; }
+.reels .swiper-slide {
+  width: min(640px, 78vw);
+  transform: scale(0.94);
+  opacity: 0.4;
+  transition: transform 560ms cubic-bezier(0.16, 1, 0.3, 1), opacity 560ms ease;
+}
+.reels .swiper-slide-active { transform: scale(1); opacity: 1; }
+
+.vis .frame {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #111;
 }
 .vis video {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
   display: block;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #111;
 }
+
+/* the play control sits over the poster and gets out of the way once the cut
+   is running — native controls take over from there */
+.vis .vplay {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.28);
+  border: 0;
+  cursor: pointer;
+  color: var(--ink);
+  transition: opacity 240ms ease, background 240ms ease;
+}
+.vis .vplay:hover { background: rgba(0, 0, 0, 0.16); }
+.vis.on .vplay { opacity: 0; pointer-events: none; }
+.vis .vglyph {
+  width: 0; height: 0;
+  border-left: 17px solid currentColor;
+  border-top: 11px solid transparent;
+  border-bottom: 11px solid transparent;
+  margin-left: 5px;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.6));
+}
+
 .vis figcaption {
-  margin-top: 8px;
-  display: flex; justify-content: space-between; gap: 10px;
+  margin-top: 10px;
+  display: flex; align-items: baseline; gap: 12px;
   font-size: 10px;
   letter-spacing: 0.16em;
 }
+.vis .vn::before { content: '·'; margin-right: 12px; color: var(--faint); }
 .vis .vt { color: var(--ink); }
 .vis .vn { color: var(--faint); }
+
+.screen-nav {
+  display: flex; justify-content: center; gap: 10px;
+  margin-top: 16px;
+}
+.screen-nav button {
+  width: 34px; height: 30px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: var(--dim);
+  font: 13px/1 var(--mono);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.screen-nav button:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.3); }
+.screen-nav button.swiper-button-disabled { opacity: 0.35; cursor: default; }
 
 .prov-note {
   margin-top: 22px;
@@ -613,30 +673,6 @@ html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
   color: var(--faint);
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   padding-left: 14px;
-}
-
-/* --- transmissions -------------------------------------------------- */
-
-.reel-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-}
-.reel { position: relative; }
-.reel video {
-  width: 100%;
-  aspect-ratio: 9 / 16;
-  object-fit: cover;
-  display: block;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #111;
-}
-.reel figcaption {
-  margin-top: 8px;
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  color: var(--dim);
 }
 
 /* --- tools ---------------------------------------------------------- */
