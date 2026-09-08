@@ -3,9 +3,10 @@
 
 import { initTilt } from '../tilt.js';
 import { mountBackdrop } from '../backdrop.js';
-import { initPlayer, initReels } from '../player.js';
+import { initReels } from '../player.js';
+import { initCrate } from '../crate.js';
 
 initTilt();
-initPlayer();
+initCrate();
 initReels();
 mountBackdrop(document.getElementById('cv'), document.getElementById('bg'));

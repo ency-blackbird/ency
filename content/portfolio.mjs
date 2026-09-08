@@ -28,25 +28,51 @@ export const PORTFOLIO = {
     ],
   },
 
-  /* The record. Seven originals, mastered — the centre of the submission. */
+  /* The record. Seven originals, mastered — the centre of the submission.
+   * Covers are provisional where flagged: three finals exist (Cyclone, Jinx,
+   * Rebound) plus Activations; the rest repeat one of those until each track
+   * has its own. Set `art` and drop `artProvisional` as they land. */
   armory: {
     id: 'ARMORY01',
-    note: 'Seven originals, mastered. First release schedule runs through the end of the year.',
-    art: '/media/art/armory01.jpg',
+    note: 'Seven originals, mastered. Drag the crate, or use the arrow keys.',
     tracks: [
-      { title: 'Cyclone',  src: '/media/audio/cyclone.mp3',  length: '6:36' },
-      { title: 'Destiny',  src: '/media/audio/destiny.mp3',  length: '6:06' },
-      { title: 'Jinx',     src: '/media/audio/jinx.mp3',     length: '6:40' },
-      { title: 'Rebound',  src: '/media/audio/rebound.mp3',  length: '7:18' },
-      { title: 'Sarang',   src: '/media/audio/sarang.mp3',   length: '6:15' },
-      { title: 'Sentinel', src: '/media/audio/sentinel.mp3', length: '5:37' },
-      { title: 'Solstice', src: '/media/audio/solstice.mp3', length: '7:40' },
+      { title: 'Cyclone',  src: '/media/audio/cyclone.mp3',  length: '6:36', art: '/media/covers/cyclone.jpg' },
+      { title: 'Destiny',  src: '/media/audio/destiny.mp3',  length: '6:06', art: '/media/covers/activations.jpg', artProvisional: true },
+      { title: 'Jinx',     src: '/media/audio/jinx.mp3',     length: '6:40', art: '/media/covers/jinx.jpg' },
+      { title: 'Rebound',  src: '/media/audio/rebound.mp3',  length: '7:18', art: '/media/covers/rebound.jpg' },
+      { title: 'Sarang',   src: '/media/audio/sarang.mp3',   length: '6:15', art: '/media/covers/activations.jpg', artProvisional: true },
+      { title: 'Sentinel', src: '/media/audio/sentinel.mp3', length: '5:37', art: '/media/covers/cyclone.jpg', artProvisional: true },
+      { title: 'Solstice', src: '/media/audio/solstice.mp3', length: '7:40', art: '/media/covers/rebound.jpg', artProvisional: true },
     ],
   },
 
-  /* Found footage. Muted, looping, playing on sight — they are texture. */
+  /* The world, in Noah's own words from the VJ pack's README. The narrative
+   * cuts are his edits of a 444-clip library he assembled and audited. */
+  visuals: {
+    lede: 'A ship of pirates and renegades.',
+    body:
+      'Bounty hunter (Cowboy Bebop), cyberpunk, retrofuturist — with a generated ' +
+      'HUD as the modern angle over 1950s industrial, 1980s NASA and 1971 club ' +
+      'film. Dune\'s futurism as the register for scale: fabrication and process, ' +
+      'matte not chrome. Tonally framed by Calvino\'s Invisible Cities.',
+    arc: 'phone entry → beam into ship → armory → everybody gathering in arena',
+    provenance:
+      '444 clips, sourced from NASA, the Prelinger Archives and artist-released ' +
+      'VJ loops, plus 41 generated. Every clip content-audited and ' +
+      'provenance-checked; commercial rips carrying unverified public-domain ' +
+      'marks were excluded.',
+    reels: [
+      { title: 'Assembly',  src: '/media/visuals/assembly.mp4',  poster: '/media/visuals/assembly.jpg',  note: 'building the ship' },
+      { title: 'Departure', src: '/media/visuals/departure.mp4', poster: '/media/visuals/departure.jpg', note: 'take-off' },
+      { title: 'Systems',   src: '/media/visuals/systems.mp4',   poster: '/media/visuals/systems.jpg',   note: 'instrumentation' },
+      { title: 'Descent',   src: '/media/visuals/descent.mp4',   poster: '/media/visuals/descent.jpg',   note: 'arrival' },
+    ],
+  },
+
+  /* The short cuts — vertical, social-shaped, muted and looping. Texture
+   * alongside the longer narrative pieces above. */
   reels: {
-    note: 'Found footage cut for the release — the world the records live in.',
+    note: 'Short cuts from the release.',
     items: [
       { title: 'Intro',       src: '/media/reels/intro.mp4',             poster: '/media/reels/intro.jpg' },
       { title: 'Rebound',     src: '/media/reels/rebound.mp4',           poster: '/media/reels/rebound.jpg' },

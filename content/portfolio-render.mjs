@@ -12,27 +12,63 @@ const section = (id, title, note, body) =>
     `\n    ${body}
   </section>`;
 
-/* The deck: one row per track, each its own play control. The audio element is
-   shared and swapped by the player script, so only one thing ever sounds. */
-function renderArmory({ id, note, art, tracks }) {
-  const rows = tracks.map((t, i) => `
-      <li class="track" data-src="${esc(t.src)}" data-title="${esc(t.title)}">
-        <button class="play" type="button" aria-label="Play ${esc(t.title)}">
+/* The crate. Swiper drives the flip — real drag, momentum, touch and keyboard —
+   and the covers are the interface: the front record is the one that plays.
+   Server-rendered slides, so the markup is complete before Swiper touches it. */
+function renderCrate({ id, note, tracks }) {
+  const slides = tracks.map((t, i) => `
+        <div class="swiper-slide rec" data-src="${esc(t.src)}"
+             data-title="${esc(t.title)}" data-len="${esc(t.length)}"
+             data-n="${String(i + 1).padStart(2, '0')}">
+          <div class="sleeve">
+            <span class="disc" aria-hidden="true"></span>
+            <img src="${esc(t.art)}" alt="${esc(t.title)} cover" loading="lazy">
+            ${t.artProvisional ? '<span class="prov" title="placeholder cover">art tbd</span>' : ''}
+          </div>
+        </div>`).join('');
+
+  return section(id, id, note, `<div class="crate">
+      <div class="swiper records">
+        <div class="swiper-wrapper">${slides}
+        </div>
+      </div>
+
+      <div class="now">
+        <button class="play" type="button" aria-label="Play">
           <span class="glyph" aria-hidden="true"></span>
         </button>
-        <span class="num">${String(i + 1).padStart(2, '0')}</span>
-        <span class="name">${esc(t.title)}</span>
-        <span class="bar" aria-hidden="true"><span class="fill"></span></span>
-        <span class="len">${esc(t.length)}</span>
-      </li>`).join('');
-
-  return section(id, id, note, `<div class="deck">
-      <div class="deck-art">
-        <img src="${esc(art)}" alt="ARMORY01 artwork" loading="lazy">
+        <span class="n"></span>
+        <span class="t"></span>
+        <span class="bar"><span class="fill"></span></span>
+        <span class="len"></span>
       </div>
-      <ol class="tracks">${rows}
-      </ol>
+
+      <div class="crate-nav">
+        <button class="prev" type="button" aria-label="Previous record">&#8592;</button>
+        <button class="next" type="button" aria-label="Next record">&#8594;</button>
+      </div>
     </div>`);
+}
+
+/* The world: the narrative cuts, plus the aesthetic in Noah's own words. */
+function renderVisuals(v) {
+  const reels = v.reels.map(r => `
+      <figure class="vis">
+        <video src="${esc(r.src)}" poster="${esc(r.poster)}"
+               muted loop playsinline preload="none"></video>
+        <figcaption><span class="vt">${esc(r.title)}</span><span class="vn">${esc(r.note)}</span></figcaption>
+      </figure>`).join('');
+
+  return section('visuals', 'The world', null, `<div class="world">
+      <p class="world-lede">${esc(v.lede)}</p>
+      <p class="world-body">${esc(v.body)}</p>
+      <p class="world-arc">${esc(v.arc)}</p>
+    </div>
+
+    <div class="vis-grid">${reels}
+    </div>
+
+    <p class="prov-note">${esc(v.provenance)}</p>`);
 }
 
 /* Reels play muted on sight and loop — texture, not something to sit through. */
@@ -81,7 +117,8 @@ export function renderPortfolio(p) {
 
   return [
     intro,
-    renderArmory(p.armory),
+    renderCrate(p.armory),
+    renderVisuals(p.visuals),
     renderReels(p.reels),
     renderTools(p.tools),
     renderUnderway(p.underway),
