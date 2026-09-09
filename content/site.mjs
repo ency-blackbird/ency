@@ -18,31 +18,33 @@ export const TOOLS = {
   slots: 2,
   wide: true,
   items: [
-    { title: 'Cuts', href: '/cuts', art: '/media/cuts/card.png' },
+    { title: 'Crates', href: '/crates', art: '/media/crates/card.png' },
   ],
 };
 
-/* Cuts — the Mac app, on its own room off tools. `available` gates the
- * download button: flip it when a signed build is on GitHub. */
-export const CUTS = {
+/* Crates — the Mac app, on its own room off tools. `available` gates the
+ * download button: flip it when a signed build is on GitHub. Wording is
+ * deliberate: it records a link; it never names a site. */
+export const CRATES = {
   available: false,
   version: '0.3.0',
-  download: 'https://github.com/chunbucket/cuts/releases/latest/download/Cuts.dmg',
-  source: 'https://github.com/chunbucket/cuts',
-  lede: 'A menu bar record player that turns a YouTube link into a FLAC in your sample folder.',
+  download: 'https://github.com/chunbucket/crates/releases/latest/download/Crates.dmg',
+  source: 'https://github.com/chunbucket/crates',
+  lede: 'A menu bar record player. Drop a link, get a record.',
   body:
-    'Drag a link from the address bar onto the icon. The record spins while it cuts, ' +
-    'then the file is filed with the art, title and source inside. Open the shelf to ' +
-    'play it, scrub it, or drag it straight into Ableton.',
+    'Drag a link from the address bar onto the icon. The record spins while it records, ' +
+    'then the FLAC is filed in your crate with the art, title and source inside. Open the ' +
+    'crate to play it, scrub it, sort by BPM or key, or drag it straight into Ableton.',
   steps: [
-    { k: 'drag', v: 'a YouTube link onto the menu bar icon, or the tray that slides in' },
-    { k: 'cut',  v: 'yt-dlp pulls the best audio, ffmpeg presses it to FLAC' },
-    { k: 'file', v: 'into your cuts folder, with art and the source link embedded' },
+    { k: 'drop',   v: 'a link onto the menu bar icon, or the tray that slides in' },
+    { k: 'record', v: 'the audio comes down and is pressed to FLAC' },
+    { k: 'file',   v: 'into your crates, analysed for BPM and key, art and source embedded' },
   ],
   requires: 'Apple silicon · macOS 14 or later · free · open source',
+  rights: 'For material you have the right to record.',
   network:
-    'It talks to YouTube for the cut and to GitHub once a day to see if there is a ' +
-    'newer version. Nothing else, and nothing is sent anywhere.',
+    'It talks to the site the link points at, and to GitHub once a day to see if there is ' +
+    'a newer version. Nothing else, and nothing is sent anywhere.',
 };
 
 /* Services — offered work, on its own room off the gate. Deliberately thin:

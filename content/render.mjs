@@ -59,7 +59,7 @@ export function renderServices(s) {
   </section>`;
 }
 
-export function renderCuts(c) {
+export function renderCrates(c) {
   const steps = c.steps.map(i => `
         <li><span class="k">${esc(i.k)}</span><span class="v">${esc(i.v)}</span></li>`).join('');
   const cta = c.available
@@ -68,13 +68,13 @@ export function renderCuts(c) {
   return `<section class="sect">
     <div class="cuts">
       <div class="cuts-hero">
-        <img src="/media/cuts/icon.png" alt="" width="96" height="96">
+        <img src="/media/crates/icon.png" alt="" width="96" height="96">
         <p class="svc-lede">${esc(c.lede)}</p>
       </div>
       <p class="svc-body">${esc(c.body)}</p>
       <ul class="svc-list">${steps}
       </ul>
-      <p class="cuts-req">${esc(c.requires)}</p>
+      <p class="cuts-req">${esc(c.requires)} · ${esc(c.rights)}</p>
       ${cta}
       <p class="cuts-links"><a href="${esc(c.source)}" target="_blank" rel="noopener noreferrer">source on GitHub</a></p>
       <p class="cuts-note">${esc(c.network)}</p>

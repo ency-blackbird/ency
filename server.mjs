@@ -23,8 +23,8 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 
 const PORT = process.env.PORT || 4720;
-import { MUSIC_SECTIONS, TOOLS, SERVICES } from './content/site.mjs';
-import { renderGrid, renderSections, renderServices } from './content/render.mjs';
+import { MUSIC_SECTIONS, TOOLS, SERVICES, CRATES } from './content/site.mjs';
+import { renderGrid, renderSections, renderServices, renderCrates } from './content/render.mjs';
 import { PORTFOLIO } from './content/portfolio.mjs';
 import { renderPortfolio } from './content/portfolio-render.mjs';
 
@@ -310,6 +310,10 @@ const server = http.createServer(async (req, res) => {
 
     if (p === '/services' || p === '/services.html')
       return servePage(res, 'services.html', { services: renderServices(SERVICES) });
+
+    if (p === '/crates' || p === '/crates.html')
+      return servePage(res, 'crates.html', { crates: renderCrates(CRATES) });
+    if (p === '/cuts' || p === '/cuts.html') { res.writeHead(301, { Location: '/crates' }); return res.end(); }
 
     // Unlisted: reachable only by its own path, never linked from the site.
     // The header is what actually keeps it out of search — deliberately NOT
