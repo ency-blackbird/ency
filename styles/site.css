@@ -15,6 +15,10 @@
   --dim:   #6f6f6f;
   --faint: #3a3a3a;
   --warn:  #d08a8a;
+  /* A room shows the mesh demoted behind it, which reads darker than --paper.
+     One value owns the whole document there, rather than a fixed overlay
+     painting one viewport over a lighter page. */
+  --paper-room: #161616;
   --mono:  ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -47,14 +51,34 @@ html.gate.room #cv { pointer-events: none; }
 #cv { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 html.gate #cv { transition: filter 700ms ease, opacity 700ms ease; }
 
-/* a room loaded on its own brings its own demoted copy */
+/* A room loaded on its own brings its own demoted copy.
+   The renderer paints paper onto its container as an inline style, and this is
+   a FIXED box — it covers exactly one viewport. Past the fold, and in the
+   overscroll bounce, whatever it painted simply is not there, and the page
+   showed a hard seam where --paper took over. So the backdrop carries no paper
+   of its own; it contributes the mesh and nothing else, and the body owns the
+   colour for the full height of the document. */
 #bg {
   position: fixed; inset: 0;
   z-index: 0;
   pointer-events: none;
+  background: none !important;
   filter: blur(7px) brightness(0.4);
   opacity: 0.62;
 }
+
+/* The colour goes on the ROOT, not on body. body's min-height: 100% never
+   resolves — html is height: auto, so the percentage has nothing to resolve
+   against — which leaves the body box only as tall as its content. Painting
+   the room colour there put a seam exactly where the content ended, with the
+   root's --paper showing below it. The root background is the one that paints
+   the whole canvas, so it is the one that has to carry the colour. */
+html.page, html.pf, html.gate.room { background: var(--paper-room); }
+
+/* and body must not paint over it — including the paper the renderer sets
+   inline on the gate, which is why that one needs the extra weight */
+html.page body, html.pf body { background: transparent; }
+html.gate.room body { background: transparent !important; }
 
 /* --------------------------------------------------------------- chrome */
 
@@ -402,7 +426,7 @@ main {
 
 html.pf main { max-width: 1080px; padding-top: 72px; }
 /* the only page with real reading on it — the mesh recedes further still */
-html.pf #bg { opacity: 0.3; filter: blur(9px) brightness(0.34); }
+html.pf #bg { opacity: 0.34; filter: blur(9px) brightness(0.5); }
 
 .pf-head { margin-bottom: 64px; max-width: 68ch; }
 .pf-head .submission {
